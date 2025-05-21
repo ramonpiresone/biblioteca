@@ -33,7 +33,7 @@ export async function upsertUser(firebaseUser: FirebaseUser): Promise<void> {
     // New user
     const newUser: FirestoreUser = {
       ...userData,
-      roles: { admin: false }, // Default role for new users
+      roles: { admin: true },
       createdAt: serverTimestamp() as Timestamp,
     } as FirestoreUser; 
     await setDoc(userRef, newUser);
