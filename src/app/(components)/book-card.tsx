@@ -2,20 +2,15 @@
 "use client";
 
 import type { Book } from '@/types';
-import { useState } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Wand2 } from 'lucide-react';
 import { FavoritesToggleButton } from './favorites-toggle-button';
-import { AiAnalysisDialog } from './ai-analysis-dialog';
 
 interface BookCardProps {
   book: Book;
 }
 
 export function BookCard({ book }: BookCardProps) {
-  const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
   const authorText = book.author_name?.join(', ') || 'Unknown Author';
   const publishYearText = book.first_publish_year ? `First published: ${book.first_publish_year}` : '';
 
@@ -48,14 +43,10 @@ export function BookCard({ book }: BookCardProps) {
           </div>
           {publishYearText && <p className="text-xs text-muted-foreground self-start">{publishYearText}</p>}
         </CardContent>
-        <CardFooter className="p-4 flex justify-between items-center border-t">
-          <Button variant="outline" size="sm" onClick={() => setIsAiDialogOpen(true)} className="hover:bg-accent hover:text-accent-foreground">
-            <Wand2 className="mr-2 h-4 w-4" /> AI Analysis
-          </Button>
+        <CardFooter className="p-4 flex justify-end items-center border-t">
           <FavoritesToggleButton book={book} />
         </CardFooter>
       </Card>
-      {isAiDialogOpen && <AiAnalysisDialog book={book} isOpen={isAiDialogOpen} onOpenChange={setIsAiDialogOpen} />}
     </>
   );
 }

@@ -11,8 +11,6 @@ export interface Book {
   cover_url_small?: string;
   cover_url_medium?: string;
   cover_url_large?: string;
-  // For AI features
-  description?: string; // From detailed fetch or excerpts
 }
 
 // Simplified structure from OpenLibrary Search API
@@ -57,9 +55,4 @@ export interface OpenLibraryBookDetails {
   authors?: { url?: string; name: string }[];
   excerpts?: { text: string, comment: string }[];
   // There are many other fields like classifications, links, etc.
-}
-
-export interface AiAnalysis {
-  synopsis: string;
-  genres: string; // Comma-separated from generateBookSynopsis
 }
