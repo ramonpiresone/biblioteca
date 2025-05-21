@@ -74,9 +74,14 @@ export function SiteHeader() {
           ) : user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={user.photoURL || undefined} alt={user.displayName || user.email || "User Avatar"} />
+                <Button variant="ghost" className="flex items-center gap-2 p-1 rounded-full h-auto focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0">
+                  {user.displayName && (
+                    <span className="text-sm font-medium hidden sm:inline-block text-card-foreground">
+                      {user.displayName.split(' ')[0]} {/* Mostra apenas o primeiro nome */}
+                    </span>
+                  )}
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.photoURL || undefined} alt={user.displayName || user.email || "Avatar do usuário"} />
                     <AvatarFallback>{getUserInitials(user.displayName, user.email)}</AvatarFallback>
                   </Avatar>
                 </Button>
