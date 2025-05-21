@@ -27,7 +27,7 @@ export interface CreateLoanInput {
   borrowerCPF: string; // CPF of the person borrowing the book
   bookKey: string;
   bookTitle: string;
-  dueDate: Timestamp;
+  dueDate: Date; // Changed from Timestamp to Date
 }
 
 
@@ -68,7 +68,7 @@ export async function createLoan(
         borrowerCPF: loanDetails.borrowerCPF,
         bookKey: loanDetails.bookKey,
         bookTitle: loanDetails.bookTitle,
-        dueDate: loanDetails.dueDate,
+        dueDate: Timestamp.fromDate(loanDetails.dueDate), // Convert JS Date to Firestore Timestamp here
         loanDate: serverTimestamp() as Timestamp,
         status: 'active',
         createdAt: serverTimestamp() as Timestamp,

@@ -8,7 +8,7 @@ import * as z from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Calendar as CalendarIcon, Search, Loader2, BookCheck } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
+// Removed Timestamp import from 'firebase/firestore' as it's handled in server action
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,7 +125,7 @@ export function CreateLoanForm() {
         borrowerCPF: data.borrowerCPF.replace(/[^\d]/g, ""), // Sanitize CPF
         bookKey: selectedBook.key,
         bookTitle: selectedBook.title,
-        dueDate: Timestamp.fromDate(data.dueDate),
+        dueDate: data.dueDate, // Pass dueDate as JS Date object
       };
 
       await createLoan(loanInput);
