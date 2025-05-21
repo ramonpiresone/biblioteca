@@ -30,6 +30,17 @@ export interface CreateLoanInput {
   dueDate: Date; 
 }
 
+// Helper function to safely convert Firestore Timestamps or similar objects to JS Dates
+const convertToDate = (field: any): Date | null => {
+  if (!field) return null;
+  if (field instanceof Date) return field; // Already a Date
+  if (typeof field.toDate === 'function') return field.toDate(); // Firestore Timestamp or compatible
+  // Attempt to parse if it's a string or number (e.g., seconds from epoch)
+  const date = new Date(field);
+  if (!isNaN(date.getTime())) return date;
+  return null; // Or throw an error if strict conversion is needed
+};
+
 
 /**
  * Creates a new loan record in Firestore and decrements book availability.
@@ -61,21 +72,22 @@ export async function createLoan(
       });
 
       // Create loan document
-      const loanWithTimestamps: Omit<Loan, 'id' | 'loanDate' | 'dueDate' | 'returnDate' | 'createdAt'> & { loanDate: Timestamp, dueDate: Timestamp, returnDate?: Timestamp, createdAt: Timestamp } = {
+      // Firestore expects Timestamps, so convert JS Date for dueDate here. loanDate and createdAt use serverTimestamp.
+      const loanDataForFirestore = {
         userId: loanDetails.userId, // Admin's UID
         userDisplayName: loanDetails.userDisplayName, // Admin's name
         userEmail: loanDetails.userEmail, // Admin's email
         borrowerCPF: loanDetails.borrowerCPF,
         bookKey: loanDetails.bookKey,
         bookTitle: loanDetails.bookTitle,
-        dueDate: Timestamp.fromDate(loanDetails.dueDate), // Convert JS Date to Firestore Timestamp here
-        loanDate: serverTimestamp() as Timestamp,
-        status: 'active',
-        createdAt: serverTimestamp() as Timestamp,
+        dueDate: Timestamp.fromDate(loanDetails.dueDate), // Convert JS Date to Firestore Timestamp
+        loanDate: serverTimestamp(), // Firestore server-side timestamp
+        status: 'active' as 'active' | 'returned',
+        createdAt: serverTimestamp(), // Firestore server-side timestamp
       };
       
       const newLoanRef = doc(collection(db, 'loans'));
-      transaction.set(newLoanRef, loanWithTimestamps);
+      transaction.set(newLoanRef, loanDataForFirestore);
       return newLoanRef.id;
     });
     return loanId;
@@ -87,7 +99,7 @@ export async function createLoan(
 
 /**
  * Fetches all loans for a given user, ordered by loan date descending.
- * Converts Timestamps to JS Date objects.
+ * Converts Timestamps to JS Date objects suitable for client components.
  * @param userId The ID of the user.
  * @returns A promise that resolves to an array of Loan objects with JS Dates.
  */
@@ -106,11 +118,17 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
     const data = docSnap.data();
     return {
       id: docSnap.id,
-      ...data,
-      loanDate: (data.loanDate as Timestamp)?.toDate(),
-      dueDate: (data.dueDate as Timestamp)?.toDate(),
-      returnDate: (data.returnDate as Timestamp)?.toDate() || null,
-      createdAt: (data.createdAt as Timestamp)?.toDate(),
+      userId: data.userId,
+      userDisplayName: data.userDisplayName,
+      userEmail: data.userEmail,
+      borrowerCPF: data.borrowerCPF,
+      bookKey: data.bookKey,
+      bookTitle: data.bookTitle,
+      status: data.status,
+      loanDate: convertToDate(data.loanDate)!, // Not null
+      dueDate: convertToDate(data.dueDate)!,   // Not null
+      returnDate: convertToDate(data.returnDate), // Can be null
+      createdAt: convertToDate(data.createdAt)!, // Not null
     } as Loan;
   });
 }
@@ -134,16 +152,17 @@ export async function returnBook(loanId: string): Promise<void> {
       if (!loanSnap.exists()) {
         throw new Error(`Empréstimo com ID ${loanId} não encontrado.`);
       }
-      const loanData = loanSnap.data() as Loan; // Assuming this comes with Timestamps initially
-      if (loanData.status === 'returned') {
+      // Loan data directly from Firestore will have Timestamps if they are Firestore Timestamps
+      const loanDataFromFirestore = loanSnap.data(); 
+      if (loanDataFromFirestore.status === 'returned') {
         console.warn(`Empréstimo ${loanId} já está marcado como devolvido.`);
         return;
       }
 
-      const bookRef = doc(db, 'books', loanData.bookKey);
+      const bookRef = doc(db, 'books', loanDataFromFirestore.bookKey);
       const bookSnap = await transaction.get(bookRef);
       if (!bookSnap.exists()) {
-        throw new Error(`Livro com chave ${loanData.bookKey} associado ao empréstimo ${loanId} não encontrado.`);
+        throw new Error(`Livro com chave ${loanDataFromFirestore.bookKey} associado ao empréstimo ${loanId} não encontrado.`);
       }
       const bookData = bookSnap.data() as Book;
 
@@ -154,7 +173,7 @@ export async function returnBook(loanId: string): Promise<void> {
 
       transaction.update(loanRef, {
         status: 'returned',
-        returnDate: serverTimestamp() as Timestamp,
+        returnDate: serverTimestamp(), // Firestore server-side timestamp
       });
     });
   } catch (error) {
@@ -166,7 +185,7 @@ export async function returnBook(loanId: string): Promise<void> {
 
 /**
  * Fetches all loans from the database, ordered by loan date descending.
- * Intended for admin use. Converts Timestamps to JS Date objects.
+ * Intended for admin use. Converts Timestamps to JS Date objects suitable for client components.
  * @returns A promise that resolves to an array of Loan objects with JS Dates.
  */
 export async function getAllLoans(): Promise<Loan[]> {
@@ -183,11 +202,17 @@ export async function getAllLoans(): Promise<Loan[]> {
     // Convert Firestore Timestamps to JS Date objects
     return {
       id: docSnap.id,
-      ...data,
-      loanDate: (data.loanDate as Timestamp)?.toDate(),
-      dueDate: (data.dueDate as Timestamp)?.toDate(),
-      returnDate: (data.returnDate as Timestamp)?.toDate() || null,
-      createdAt: (data.createdAt as Timestamp)?.toDate(),
+      userId: data.userId,
+      userDisplayName: data.userDisplayName,
+      userEmail: data.userEmail,
+      borrowerCPF: data.borrowerCPF,
+      bookKey: data.bookKey,
+      bookTitle: data.bookTitle,
+      status: data.status,
+      loanDate: convertToDate(data.loanDate)!, // Not null
+      dueDate: convertToDate(data.dueDate)!,   // Not null
+      returnDate: convertToDate(data.returnDate), // Can be null
+      createdAt: convertToDate(data.createdAt)!, // Not null
     } as Loan;
   });
 }

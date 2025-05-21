@@ -13,7 +13,7 @@ export interface Book {
   cover_url_medium?: string;
   cover_url_large?: string;
   description?: string;
-  lastAccessedAt?: Timestamp; // For Firestore book collection
+  lastAccessedAt?: Timestamp; // For Firestore book collection - Stays Timestamp as it's direct Firestore interaction
   quantity?: number; // Total quantity of this book in the library
   availableQuantity?: number; // Quantity currently available for loan
 }
@@ -78,13 +78,13 @@ export interface FirestoreUser {
   roles: {
     admin: boolean;
   };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Timestamp; // Stays Timestamp for Firestore direct interaction
+  updatedAt: Timestamp; // Stays Timestamp for Firestore direct interaction
 }
 
 export interface FavoriteRecord {
   bookKey: string; // Firestore document ID of the book (OLID)
-  favoritedAt: Timestamp;
+  favoritedAt: Timestamp; // Stays Timestamp
 }
 
 export interface Loan {
@@ -95,10 +95,9 @@ export interface Loan {
   borrowerCPF: string; // CPF of the person borrowing the book
   bookKey: string; // Firestore document ID of the book (OLID)
   bookTitle: string; // Denormalized for easy display
-  loanDate: Timestamp;
-  dueDate: Timestamp;
-  returnDate?: Timestamp | null;
+  loanDate: Date; // Changed to Date
+  dueDate: Date; // Changed to Date
+  returnDate?: Date | null; // Changed to Date | null
   status: 'active' | 'returned';
-  createdAt: Timestamp;
+  createdAt: Date; // Changed to Date
 }
-
