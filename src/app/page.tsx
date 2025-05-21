@@ -20,7 +20,7 @@ export default function HomePage() {
 
   const debouncedQuery = useDebounce(query, 500);
 
-  const performSearch = useCallback(async (currentQuery: string) => {
+  const performSearch = useCallback(async (currentQuery: string, signal: AbortSignal) => {
     if (!currentQuery.trim()) {
       setResults([]);
       setError(null);
@@ -34,27 +34,44 @@ export default function HomePage() {
     setInitialLoad(false);
 
     try {
-      const books = await searchBooks(currentQuery);
-      setResults(books);
-    } catch (e) {
-      console.error("Search failed:", e);
-      setError("Falha ao buscar livros. Por favor, tente novamente mais tarde.");
-      setResults([]);
+      const books = await searchBooks(currentQuery, 20, signal);
+      if (!signal.aborted) {
+        setResults(books);
+      }
+    } catch (e: any) { // Catching AbortError is handled in searchBooks
+      if (e.name !== 'AbortError') {
+        console.error("Search failed:", e);
+        if (!signal.aborted) {
+          setError("Falha ao buscar livros. Por favor, tente novamente mais tarde.");
+          setResults([]);
+        }
+      }
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    // Initial "empty" search to show some default books or handle initial state
+    const controller = new AbortController();
+    const signal = controller.signal;
+
     if (initialLoad && debouncedQuery === '') {
-      // You could fetch some popular books here by default if desired
-      // For now, just sets initialLoad to false to avoid loading state on first render
       setInitialLoad(false); 
+      setIsLoading(false); // Ensure loading is false if no search is performed
+      setResults([]); // Ensure results are empty if no search
+      setError(null); // Ensure no error if no search
       return;
     }
-    performSearch(debouncedQuery);
-  }, [debouncedQuery, performSearch, initialLoad]);
+    
+    performSearch(debouncedQuery, signal);
+
+    return () => {
+      controller.abort();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [debouncedQuery, initialLoad]); // performSearch is stable due to useCallback with empty deps
   
   return (
     <div className="space-y-8">
@@ -63,7 +80,7 @@ export default function HomePage() {
         Explore uma vasta coleção de livros. Pesquise e adicione aos favoritos.
       </p>
       
-      <BookSearch query={query} setQuery={setQuery} />
+      <BookSearch query={query} setQuery={setQuery} placeholder="Buscar por título, autor ou ISBN..."/>
 
       {isLoading && <Loader className="my-8" size={48} />}
       
@@ -79,7 +96,7 @@ export default function HomePage() {
          <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado para &quot;{query}&quot;.</p>
       )}
 
-      {!isLoading && !error && (results.length > 0 || (initialLoad && query === '')) && (
+      {!isLoading && !error && results.length > 0 && (
         <BookList books={results} />
       )}
       

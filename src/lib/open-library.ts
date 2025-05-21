@@ -23,7 +23,7 @@ function getCoverUrls(item: { cover_i?: number, isbn?: string[] }): { small?: st
   return {};
 }
 
-export async function searchBooks(query: string, limit: number = 20): Promise<Book[]> {
+export async function searchBooks(query: string, limit: number = 20, signal?: AbortSignal): Promise<Book[]> {
   if (!query.trim()) {
     return [];
   }
@@ -34,7 +34,7 @@ export async function searchBooks(query: string, limit: number = 20): Promise<Bo
   });
 
   try {
-    const response = await fetch(`${OPEN_LIBRARY_SEARCH_URL}?${params.toString()}`);
+    const response = await fetch(`${OPEN_LIBRARY_SEARCH_URL}?${params.toString()}`, { signal });
     if (!response.ok) {
       console.error('Open Library API search error:', response.status, await response.text());
       return [];
@@ -52,19 +52,23 @@ export async function searchBooks(query: string, limit: number = 20): Promise<Bo
         isbn: doc.isbn,
         cover_i: doc.cover_i,
         olid: olid,
-        description: "Descrição não disponível através da busca geral.", // Adicionando uma descrição placeholder
+        // description: "Descrição não disponível através da busca geral.", // Removed as per previous request to not use AI features
         cover_url_small: covers.small,
         cover_url_medium: covers.medium,
         cover_url_large: covers.large,
       };
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.log('Busca de livros abortada.');
+      return []; 
+    }
     console.error('Falha ao buscar livros da Open Library:', error);
     return [];
   }
 }
 
-export async function getBookDetailsByISBN(isbn: string): Promise<OpenLibraryBookDetails | null> {
+export async function getBookDetailsByISBN(isbn: string, signal?: AbortSignal): Promise<OpenLibraryBookDetails | null> {
   if (!isbn.trim()) {
     return null;
   }
@@ -75,7 +79,7 @@ export async function getBookDetailsByISBN(isbn: string): Promise<OpenLibraryBoo
   });
 
   try {
-    const response = await fetch(`${OPEN_LIBRARY_BOOKS_API_URL}?${params.toString()}`);
+    const response = await fetch(`${OPEN_LIBRARY_BOOKS_API_URL}?${params.toString()}`, { signal });
     if (!response.ok) {
       console.error('Open Library Books API error:', response.status, await response.text());
       return null;
@@ -83,9 +87,12 @@ export async function getBookDetailsByISBN(isbn: string): Promise<OpenLibraryBoo
     const data: OpenLibraryBookData = await response.json();
     const bookKey = `ISBN:${isbn}`;
     return data[bookKey] || null;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.log('Busca de detalhes do livro abortada.');
+      return null;
+    }
     console.error('Falha ao buscar detalhes do livro da Open Library:', error);
     return null;
   }
 }
-
