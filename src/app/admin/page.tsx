@@ -7,8 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Loader } from '@/components/ui/loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddBookForm } from './add-book-form';
-// Placeholder for ManageLoans component, to be created later
-// import { ManageLoans } from './manage-loans'; 
+import { ManageLoans } from './manage-loans'; 
 import { ShieldAlert } from 'lucide-react';
 
 export default function AdminPage() {
@@ -49,17 +48,13 @@ export default function AdminPage() {
       <Tabs defaultValue="add-books" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
           <TabsTrigger value="add-books">Adicionar Livros</TabsTrigger>
-          <TabsTrigger value="manage-loans" disabled>Gerenciar Empréstimos (Em Breve)</TabsTrigger>
+          <TabsTrigger value="manage-loans">Gerenciar Empréstimos</TabsTrigger>
         </TabsList>
         <TabsContent value="add-books" className="mt-6">
           <AddBookForm />
         </TabsContent>
         <TabsContent value="manage-loans" className="mt-6">
-          <div className="p-6 bg-card rounded-lg shadow border">
-             <h2 className="text-xl font-semibold mb-4">Gerenciar Empréstimos</h2>
-             <p className="text-muted-foreground">Esta funcionalidade estará disponível em breve.</p>
-          </div>
-          {/* <ManageLoans />  Placeholder for when the component is ready */}
+          <ManageLoans />
         </TabsContent>
       </Tabs>
     </div>
