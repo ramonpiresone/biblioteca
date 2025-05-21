@@ -1,3 +1,4 @@
+import type { Timestamp } from 'firebase/firestore';
 
 export interface Book {
   key: string; // OpenLibrary internal key e.g. /works/OL...
@@ -6,14 +7,14 @@ export interface Book {
   first_publish_year?: number;
   isbn?: string[]; // Array of ISBNs
   cover_i?: number; // Cover ID from search API
-  // Derived properties
   olid?: string; // OpenLibrary ID (e.g. OLID:OL...) from key
   cover_url_small?: string;
   cover_url_medium?: string;
   cover_url_large?: string;
+  description?: string; // Added for storing more detailed description
+  lastAccessedAt?: Timestamp; // For Firestore book collection
 }
 
-// Simplified structure from OpenLibrary Search API
 export interface OpenLibrarySearchDoc {
   key: string;
   title: string;
@@ -23,7 +24,7 @@ export interface OpenLibrarySearchDoc {
   cover_i?: number;
   author_key?: string[];
   edition_key?: string[];
-  olid?: string[]; // Often OpenLibrary IDs for editions
+  olid?: string[];
 }
 
 export interface OpenLibrarySearchResponse {
@@ -33,16 +34,13 @@ export interface OpenLibrarySearchResponse {
   start: number;
 }
 
-// For the detailed book data from OpenLibrary Books API (using ISBN)
-// e.g. https://openlibrary.org/api/books?bibkeys=ISBN:0451526538&format=json&jscmd=data
-// The key in the response is like "ISBN:0451526538"
 export interface OpenLibraryBookData {
   [isbnKey: string]: OpenLibraryBookDetails;
 }
 
 export interface OpenLibraryBookDetails {
-  url?: string; // e.g., "https://openlibrary.org/books/OL30678200M/Pai_Rico_Pai_Pobre"
-  key?: string; // e.g., "/books/OL30678200M"
+  url?: string;
+  key?: string;
   title: string;
   subtitle?: string;
   authors?: { url?: string; name: string }[];
@@ -53,20 +51,43 @@ export interface OpenLibraryBookDetails {
     openlibrary?: string[];
   };
   publishers?: { name: string }[];
-  publish_date?: string; // e.g. "Oct 20, 2017"
+  publish_date?: string;
   subjects?: { name: string; url: string }[];
-  notes?: string; // Can be general notes or source information
+  notes?: string;
+  excerpts?: { text: string; comment?: string }[];
   links?: { title: string; url: string }[];
   cover?: {
     small?: string;
     medium?: string;
     large?: string;
   };
-  // Removed 'excerpts' as it's not in the provided example structure.
 }
 
-// Type for AI Analysis (currently unused as AI features were removed)
-export interface AiAnalysis {
-  synopsis: string;
-  genres: string; // Comma-separated list
+export interface FirestoreUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  roles: {
+    admin: boolean;
+  };
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface FavoriteRecord {
+  bookKey: string;
+  favoritedAt: Timestamp;
+}
+
+export interface Loan {
+  id?: string; // Firestore document ID
+  userId: string;
+  bookKey: string; // Reference to the book's key in the 'books' collection
+  bookTitle: string; // Denormalized for easy display
+  loanDate: Timestamp;
+  dueDate: Timestamp;
+  returnDate?: Timestamp | null;
+  status: 'active' | 'returned'; // 'active' or 'returned'
+  createdAt: Timestamp;
 }

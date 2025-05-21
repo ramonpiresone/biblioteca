@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { auth, googleProvider } from '@/lib/firebase';
 import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, UserCredential } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { upsertUser } from '@/services/userService'; // Added import
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -22,8 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        // Upsert user in Firestore after auth state changes and user is available
+        try {
+          await upsertUser(currentUser);
+        } catch (error) {
+          console.error("Error upserting user in Firestore:", error);
+        }
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -33,12 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      // onAuthStateChanged will handle setting the user and loading state
+      // onAuthStateChanged will handle setting the user, loading state, and calling upsertUser
       return result;
     } catch (error) {
       console.error("Error signing in with Google", error);
-      setLoading(false); // Ensure loading is false on error
-      // You might want to use a toast notification to inform the user
+      setLoading(false);
     }
   };
 
@@ -46,12 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      setUser(null); // Explicitly set user to null
-      localStorage.removeItem('bibliotech_favorites'); // Clear favorites
-      router.push('/login'); // Redirect to login after sign out
+      setUser(null);
+      // localStorage.removeItem('bibliotech_favorites'); // No longer needed as favorites are in Firestore
+      router.push('/login');
     } catch (error) {
       console.error("Error signing out", error);
-      // You might want to use a toast notification
     } finally {
       setLoading(false);
     }

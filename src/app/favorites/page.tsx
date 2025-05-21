@@ -8,9 +8,10 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function FavoritesPage() {
-  const { favorites, isLoaded } = useFavorites();
+  const { favorites, isLoaded, isLoading } = useFavorites(); // isLoading for ongoing, isLoaded for initial
 
-  if (!isLoaded) {
+  // Show loader if initial data isn't loaded OR an operation is in progress
+  if (!isLoaded || isLoading) {
     return <Loader className="my-8" size={48} />;
   }
 
