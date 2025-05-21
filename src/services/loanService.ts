@@ -21,40 +21,80 @@ import type { Loan, Book } from '@/types';
 
 // Define a more specific input type for creating loans
 export interface CreateLoanInput {
-  userId: string; // UID of the user initiating the loan (e.g., admin)
-  userDisplayName?: string;
-  userEmail?: string;
-  borrowerCPF: string; // CPF of the person borrowing the book
+  adminId: string; // UID of the admin creating the loan
+  adminName?: string;
+  adminEmail?: string;
+  studentName: string; // Name of the student
+  studentCPF: string; // CPF of the student
   bookKey: string;
   bookTitle: string;
   dueDate: Date; 
 }
 
 // Helper function to safely convert Firestore Timestamps or similar objects to JS Dates
-const convertToDate = (field: any): Date | null => {
+const convertToDate = (field: unknown): Date | null => {
   if (!field) return null;
-  if (field instanceof Date) return field; // Already a Date
-  if (typeof field.toDate === 'function') return field.toDate(); // Firestore Timestamp or compatible
-  // Attempt to parse if it's a string or number (e.g., seconds from epoch)
-  const date = new Date(field);
-  if (!isNaN(date.getTime())) return date;
-  return null; // Or throw an error if strict conversion is needed
+  
+  // Se já é uma Data
+  if (field instanceof Date) return field;
+  
+  // Se é um Timestamp do Firestore
+  if (typeof field === 'object' && field !== null && 'toDate' in field && typeof field.toDate === 'function') {
+    return field.toDate();
+  }
+  
+  // Se é string ou número
+  if (typeof field === 'string' || typeof field === 'number') {
+    const date = new Date(field);
+    if (!isNaN(date.getTime())) return date;
+  }
+  
+  return null;
 };
 
 /**
  * Valida os dados de entrada para criação de empréstimo
- * @param loanDetails Dados do empréstimo a serem validados
- * @throws Error se os dados forem inválidos
+ * @param loanDetails Dados do empréstimo incluindo informações do estudante e livro
+ * @throws Error se os dados do estudante ou livro forem inválidos
  */
 function validateLoanInput(loanDetails: CreateLoanInput): void {
-  if (!loanDetails.borrowerCPF || !validateCPF(loanDetails.borrowerCPF)) {
+  // Validação do administrador
+  if (!loanDetails.adminId?.trim()) {
+    throw new Error("ID do administrador é obrigatório.");
+  }
+
+  // Validação do estudante
+  const studentName = loanDetails.studentName?.trim();
+  if (!studentName) {
+    throw new Error("Nome do estudante é obrigatório.");
+  }
+  if (studentName.length < 3) {
+    throw new Error("Nome do estudante deve ter pelo menos 3 caracteres.");
+  }
+  if (studentName.length > 100) {
+    throw new Error("Nome do estudante não pode ter mais que 100 caracteres.");
+  }
+  if (!loanDetails.studentCPF) {
+    throw new Error("CPF do estudante é obrigatório.");
+  }
+  if (!validateCPF(loanDetails.studentCPF)) {
     throw new Error("CPF inválido. Por favor, verifique os dígitos.");
   }
-  if (!loanDetails.bookKey) {
+
+  // Validação do livro
+  if (!loanDetails.bookKey?.trim()) {
     throw new Error("Livro não selecionado.");
   }
+  if (!loanDetails.bookTitle?.trim()) {
+    throw new Error("Título do livro é obrigatório.");
+  }
+
+  // Validação da data
   if (!loanDetails.dueDate) {
     throw new Error("Data de devolução não informada.");
+  }
+  if (!(loanDetails.dueDate instanceof Date)) {
+    throw new Error("Data de devolução inválida.");
   }
   if (loanDetails.dueDate < new Date()) {
     throw new Error("Data de devolução deve ser no futuro.");
@@ -64,9 +104,9 @@ function validateLoanInput(loanDetails: CreateLoanInput): void {
 /**
  * Creates a new loan record in Firestore and decrements book availability.
  * Transactional.
- * @param loanDetails Data for the new loan, including admin's UID and borrower's CPF.
+ * @param loanDetails Data for the new loan, including admin's info and student's data.
  * @returns The ID of the newly created loan document.
- * @throws Error if the book is not available or other Firestore errors.
+ * @throws Error if the book is not available, invalid student data, or other Firestore errors.
  */
 export async function createLoan(
   loanDetails: CreateLoanInput
@@ -96,16 +136,17 @@ export async function createLoan(
       // Create loan document
       // Firestore expects Timestamps, so convert JS Date for dueDate here. loanDate and createdAt use serverTimestamp.
       const loanDataForFirestore = {
-        userId: loanDetails.userId, // Admin's UID
-        userDisplayName: loanDetails.userDisplayName, // Admin's name
-        userEmail: loanDetails.userEmail, // Admin's email
-        borrowerCPF: loanDetails.borrowerCPF,
+        adminId: loanDetails.adminId,
+        adminName: loanDetails.adminName,
+        adminEmail: loanDetails.adminEmail,
+        studentName: loanDetails.studentName,
+        studentCPF: loanDetails.studentCPF,
         bookKey: loanDetails.bookKey,
         bookTitle: loanDetails.bookTitle,
         dueDate: Timestamp.fromDate(loanDetails.dueDate), // Convert JS Date to Firestore Timestamp
         loanDate: serverTimestamp(), // Firestore server-side timestamp
         status: 'active' as 'active' | 'returned',
-        createdAt: serverTimestamp(), // Firestore server-side timestamp
+        createdAt: serverTimestamp() // Firestore server-side timestamp
       };
       
       const newLoanRef = doc(collection(db, 'loans'));
@@ -120,9 +161,9 @@ export async function createLoan(
 }
 
 /**
- * Fetches all loans for a given user, ordered by loan date descending.
+ * Fetches all loans for a given administrator, ordered by loan date descending.
  * Converts Timestamps to JS Date objects suitable for client components.
- * @param userId The ID of the user.
+ * @param userId The ID of the administrator.
  * @returns A promise that resolves to an array of Loan objects with JS Dates.
  */
 export async function getUserLoans(userId: string): Promise<Loan[]> {
@@ -131,7 +172,7 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
   const loansColRef = collection(db, 'loans');
   const q = query(
     loansColRef,
-    where('userId', '==', userId), 
+    where('adminId', '==', userId), 
     orderBy('loanDate', 'desc')
   );
   const loansSnapshot = await getDocs(q);
@@ -140,10 +181,11 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
     const data = docSnap.data();
     return {
       id: docSnap.id,
-      userId: data.userId,
-      userDisplayName: data.userDisplayName,
-      userEmail: data.userEmail,
-      borrowerCPF: data.borrowerCPF,
+      adminId: data.adminId,
+      adminName: data.adminName,
+      adminEmail: data.adminEmail,
+      studentName: data.studentName,
+      studentCPF: data.studentCPF,
       bookKey: data.bookKey,
       bookTitle: data.bookTitle,
       status: data.status,
@@ -175,7 +217,11 @@ export async function returnBook(loanId: string): Promise<void> {
         throw new Error(`Empréstimo com ID ${loanId} não encontrado.`);
       }
       // Loan data directly from Firestore will have Timestamps if they are Firestore Timestamps
-      const loanDataFromFirestore = loanSnap.data(); 
+      const loanDataFromFirestore = loanSnap.data();
+      // Validação adicional do status
+      if (!loanDataFromFirestore.status || !['active', 'returned'].includes(loanDataFromFirestore.status)) {
+        throw new Error(`Status do empréstimo ${loanId} é inválido.`);
+      }
       if (loanDataFromFirestore.status === 'returned') {
         console.warn(`Empréstimo ${loanId} já está marcado como devolvido.`);
         return;
@@ -224,10 +270,11 @@ export async function getAllLoans(): Promise<Loan[]> {
     // Convert Firestore Timestamps to JS Date objects
     return {
       id: docSnap.id,
-      userId: data.userId,
-      userDisplayName: data.userDisplayName,
-      userEmail: data.userEmail,
-      borrowerCPF: data.borrowerCPF,
+      adminId: data.adminId,
+      adminName: data.adminName,
+      adminEmail: data.adminEmail,
+      studentName: data.studentName,
+      studentCPF: data.studentCPF,
       bookKey: data.bookKey,
       bookTitle: data.bookTitle,
       status: data.status,

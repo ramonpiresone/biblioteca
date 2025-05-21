@@ -89,15 +89,16 @@ export interface FavoriteRecord {
 
 export interface Loan {
   id?: string; // Firestore document ID
-  userId: string; // UID of the user who initiated the loan (admin or borrower if self-service)
-  userDisplayName?: string; // Denormalized for admin display (admin's name or borrower's name)
-  userEmail?: string; // Denormalized for admin display (admin's email or borrower's email)
-  borrowerCPF: string; // CPF of the person borrowing the book
+  adminId: string; // UID of the admin who created the loan
+  adminName?: string; // Name of the admin who created the loan
+  adminEmail?: string; // Email of the admin who created the loan
+  studentName: string; // Name of the student borrowing the book
+  studentCPF: string; // CPF of the student borrowing the book
   bookKey: string; // Firestore document ID of the book (OLID)
   bookTitle: string; // Denormalized for easy display
-  loanDate: Date; // Changed to Date
-  dueDate: Date; // Changed to Date
-  returnDate?: Date | null; // Changed to Date | null
+  loanDate: Date; // Date when the loan was created
+  dueDate: Date; // Expected return date
+  returnDate?: Date | null; // Actual return date
   status: 'active' | 'returned';
-  createdAt: Date; // Changed to Date
+  createdAt: Date; // Creation timestamp
 }

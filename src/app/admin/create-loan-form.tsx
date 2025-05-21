@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,11 +11,9 @@ import { Calendar as CalendarIcon, Search, Loader2, BookCheck } from 'lucide-rea
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -39,21 +37,31 @@ import { cn } from '@/lib/utils';
 import { validateCPF } from '@/lib/validation';
 
 const createLoanSchema = z.object({
-  borrowerCPF: z.string()
+  studentName: z.string()
+    .min(3, { message: "Nome do estudante deve ter pelo menos 3 caracteres." })
+    .max(100, { message: "Nome do estudante não pode ter mais que 100 caracteres." }),
+  studentCPF: z.string()
     .min(11, { message: "CPF deve ter 11 dígitos." })
     .max(14, { message: "CPF não pode ter mais que 14 caracteres." })
     .regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "Formato de CPF inválido. Use XXX.XXX.XXX-XX ou XXXXXXXXXXX." })
     .refine((cpf) => validateCPF(cpf), { message: "CPF inválido. Verifique os dígitos." }),
   dueDate: z.date({
     required_error: "Data de devolução é obrigatória.",
-  }),
+  }).refine(
+    (date) => {
+      const maxDate = new Date();
+      maxDate.setDate(maxDate.getDate() + 60); // Máximo de 60 dias
+      return date <= maxDate;
+    },
+    { message: "Data de devolução não pode ser maior que 60 dias." }
+  ),
   bookKey: z.string().min(1, { message: "Selecione um livro."}),
   bookTitle: z.string().min(1), // Hidden field, populated on book selection
 });
 
 type CreateLoanFormValues = z.infer<typeof createLoanSchema>;
 
-export function CreateLoanForm() {
+export function CreateLoanForm(): JSX.Element {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,14 +75,15 @@ export function CreateLoanForm() {
   const form = useForm<CreateLoanFormValues>({
     resolver: zodResolver(createLoanSchema),
     defaultValues: {
-      borrowerCPF: '',
+      studentName: '',
+      studentCPF: '',
       dueDate: undefined,
       bookKey: '',
       bookTitle: '',
     },
   });
 
-  const handleSearchBooks = useCallback(async (query: string) => {
+  const handleSearchBooks = useCallback(async (query: string): Promise<void> => {
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -101,7 +110,7 @@ export function CreateLoanForm() {
     handleSearchBooks(debouncedBookSearchQuery);
   }, [debouncedBookSearchQuery, handleSearchBooks]);
 
-  const handleSelectBook = (book: Book) => {
+  const handleSelectBook = (book: Book): void => {
     setSelectedBook(book);
     form.setValue('bookKey', book.key);
     form.setValue('bookTitle', book.title);
@@ -109,7 +118,7 @@ export function CreateLoanForm() {
     setSearchResults([]); // Clear results
   };
 
-  async function onSubmit(data: CreateLoanFormValues) {
+  async function onSubmit(data: CreateLoanFormValues): Promise<void> {
     if (!user) {
       toast({ title: "Erro de Autenticação", description: "Administrador não está logado.", variant: "destructive" });
       return;
@@ -122,10 +131,11 @@ export function CreateLoanForm() {
     setIsSubmitting(true);
     try {
       const loanInput: CreateLoanInput = {
-        userId: user.uid,
-        userDisplayName: user.displayName || undefined,
-        userEmail: user.email || undefined,
-        borrowerCPF: data.borrowerCPF.replace(/[^\d]/g, ""), // Sanitize CPF
+        adminId: user.uid,
+        adminName: user.displayName || undefined,
+        adminEmail: user.email || undefined,
+        studentName: data.studentName.trim(),
+        studentCPF: data.studentCPF.replace(/[^\d]/g, ""), // Sanitize CPF
         bookKey: selectedBook.key,
         bookTitle: selectedBook.title,
         dueDate: data.dueDate, // Pass dueDate as JS Date object
@@ -140,11 +150,12 @@ export function CreateLoanForm() {
       setSelectedBook(null);
       setBookSearchQuery('');
       setSearchResults([]);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro.';
       console.error("Falha ao registrar empréstimo:", error);
       toast({
         title: "Erro ao Registrar Empréstimo",
-        description: error.message || "Ocorreu um erro. Tente novamente.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -161,17 +172,42 @@ export function CreateLoanForm() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {user && (
+              <div className="p-4 bg-muted rounded-lg mb-6">
+                <h3 className="text-sm font-medium mb-2">Administrador Responsável</h3>
+                <p className="text-sm text-muted-foreground">{user.displayName || 'Nome não definido'}</p>
+                <p className="text-sm text-muted-foreground">{user.email}</p>
+              </div>
+            )}
+            
             <FormField
               control={form.control}
-              name="borrowerCPF"
-              render={({ field }) => (
+              name="studentName"
+              render={({ field }): JSX.Element => (
                 <FormItem>
-                  <FormLabel>CPF</FormLabel>
+                  <FormLabel>Nome do Estudante</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Nome completo do estudante"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="studentCPF"
+              render={({ field }): JSX.Element => (
+                <FormItem>
+                  <FormLabel>CPF do Estudante</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Ex: 123.456.789-00"
                       value={field.value}
-                      onChange={(e) => {
+                      onChange={(e): void => {
                         let value = e.target.value.replace(/\D/g, ''); // Remove tudo que não é dígito
                         if (value.length <= 11) { // Limita a 11 dígitos
                           // Aplica a máscara
@@ -196,7 +232,7 @@ export function CreateLoanForm() {
             <FormField
               control={form.control}
               name="dueDate"
-              render={({ field }) => (
+              render={({ field }): JSX.Element => (
                 <FormItem className="flex flex-col">
                   <FormLabel>Data de Devolução Prevista</FormLabel>
                   <Popover>
@@ -223,7 +259,12 @@ export function CreateLoanForm() {
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) } // Disable past dates
+                        disabled={(date: Date): boolean => {
+                          const today = new Date(new Date().setHours(0,0,0,0));
+                          const maxDate = new Date(today);
+                          maxDate.setDate(maxDate.getDate() + 60);
+                          return date < today || date > maxDate;
+                        }} // Disable past dates and dates more than 60 days in the future
                         initialFocus
                         locale={ptBR}
                       />
@@ -237,7 +278,7 @@ export function CreateLoanForm() {
             <FormField
               control={form.control}
               name="bookKey" // This field is for validation, value set by book selection
-              render={({ field }) => (
+              render={(): JSX.Element => (
                 <FormItem>
                   <FormLabel>Livro</FormLabel>
                   {selectedBook ? (
@@ -251,7 +292,7 @@ export function CreateLoanForm() {
                             Disponível: {selectedBook.availableQuantity}
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => {
+                      <Button variant="outline" size="sm" onClick={(): void => {
                         setSelectedBook(null);
                         form.setValue('bookKey', '');
                         form.setValue('bookTitle', '');
@@ -266,7 +307,7 @@ export function CreateLoanForm() {
                         <Input
                           placeholder="Buscar livro por título ou ISBN no acervo (somente disponíveis)..."
                           value={bookSearchQuery}
-                          onChange={(e) => setBookSearchQuery(e.target.value)}
+                          onChange={(e): void => setBookSearchQuery(e.target.value)}
                           className="pl-10"
                         />
                         {isSearchingBooks && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin" />}
@@ -279,7 +320,7 @@ export function CreateLoanForm() {
                                 key={book.key}
                                 variant="ghost"
                                 className="w-full justify-start h-auto py-2 text-left"
-                                onClick={() => handleSelectBook(book)}
+                                onClick={(): void => handleSelectBook(book)}
                                 disabled={!book.availableQuantity || book.availableQuantity <= 0}
                               >
                                 <div>
@@ -300,7 +341,7 @@ export function CreateLoanForm() {
                         </ScrollArea>
                       )}
                       {debouncedBookSearchQuery && !isSearchingBooks && searchResults.length === 0 && (
-                         <p className="text-sm text-muted-foreground mt-2">Nenhum livro disponível encontrado para "{debouncedBookSearchQuery}".</p>
+                         <p className="text-sm text-muted-foreground mt-2">Nenhum livro disponível encontrado para &quot;{debouncedBookSearchQuery}&quot;.</p>
                       )}
                     </>
                   )}

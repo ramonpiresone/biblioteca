@@ -113,11 +113,12 @@ export function ManageLoans() {
           <TableHeader>
             <TableRow>
               <TableHead>Título do Livro</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Email do Usuário</TableHead>
+              <TableHead>Nome do Estudante</TableHead>
+              <TableHead>CPF do Estudante</TableHead>
               <TableHead>Data do Empréstimo</TableHead>
               <TableHead>Data de Devolução (Prevista)</TableHead>
               <TableHead>Data de Devolução (Real)</TableHead>
+              <TableHead>Administrador</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -126,20 +127,32 @@ export function ManageLoans() {
             {loans.map((loan) => (
               <TableRow key={loan.id}>
                 <TableCell className="font-medium">{loan.bookTitle}</TableCell>
-                <TableCell>{loan.userDisplayName || 'N/A'}</TableCell>
-                <TableCell>{loan.userEmail || 'N/A'}</TableCell>
+                <TableCell>{loan.studentName}</TableCell>
+                <TableCell>{loan.studentCPF.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</TableCell>
                 <TableCell>{formatDate(loan.loanDate)}</TableCell>
                 <TableCell>{formatDate(loan.dueDate)}</TableCell>
                 <TableCell>{loan.returnDate ? formatDate(loan.returnDate) : 'Pendente'}</TableCell>
                 <TableCell>
+                  <div className="text-xs">
+                    <p className="font-medium">{loan.adminName || 'N/A'}</p>
+                    <p className="text-muted-foreground">{loan.adminEmail || 'N/A'}</p>
+                  </div>
+                </TableCell>
+                <TableCell>
                   <span
                     className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       loan.status === 'active'
-                        ? 'bg-yellow-100 text-yellow-800'
+                        ? loan.dueDate < new Date()
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
                         : 'bg-green-100 text-green-800'
                     }`}
                   >
-                    {loan.status === 'active' ? 'Ativo' : 'Devolvido'}
+                    {loan.status === 'active' 
+                      ? loan.dueDate < new Date()
+                        ? 'Atrasado'
+                        : 'Ativo'
+                      : 'Devolvido'}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
