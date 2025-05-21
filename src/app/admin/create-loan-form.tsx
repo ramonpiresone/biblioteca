@@ -39,7 +39,7 @@ import type { Book } from '@/types';
 import { cn } from '@/lib/utils';
 
 const createLoanSchema = z.object({
-  borrowerCPF: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(14, { message: "CPF inválido."})
+  borrowerCPF: z.string().min(11, { message: "CPF deve ter pelo menos 11 dígitos." }).max(14, { message: "CPF inválido."})
     .regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "Formato de CPF inválido. Use XXX.XXX.XXX-XX ou XXXXXXXXXXX."}),
   dueDate: z.date({
     required_error: "Data de devolução é obrigatória.",
@@ -78,6 +78,7 @@ export function CreateLoanForm() {
     }
     setIsSearchingBooks(true);
     try {
+      // searchLibraryBooks defaults to filterByAvailability: true
       const books = await searchLibraryBooks(query);
       setSearchResults(books);
     } catch (error) {
@@ -152,7 +153,7 @@ export function CreateLoanForm() {
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle>Registrar Novo Empréstimo</CardTitle>
-        <CardDescription>Preencha os dados abaixo para registrar um novo empréstimo.</CardDescription>
+        <CardDescription>Preencha os dados abaixo para registrar um novo empréstimo. A data de início do empréstimo será a data atual.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -164,7 +165,7 @@ export function CreateLoanForm() {
                 <FormItem>
                   <FormLabel>CPF do Mutuário</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: 123.456.789-00" {...field} />
+                    <Input placeholder="Ex: 123.456.789-00 ou 12345678900" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -225,6 +226,9 @@ export function CreateLoanForm() {
                         <p className="text-sm text-muted-foreground">
                           {selectedBook.author_name?.join(', ') || 'Autor Desconhecido'}
                         </p>
+                        <p className="text-sm text-green-600">
+                            Disponível: {selectedBook.availableQuantity}
+                        </p>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => {
                         setSelectedBook(null);
@@ -239,7 +243,7 @@ export function CreateLoanForm() {
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
-                          placeholder="Buscar livro por título ou ISBN no acervo..."
+                          placeholder="Buscar livro por título ou ISBN no acervo (somente disponíveis)..."
                           value={bookSearchQuery}
                           onChange={(e) => setBookSearchQuery(e.target.value)}
                           className="pl-10"
@@ -253,16 +257,20 @@ export function CreateLoanForm() {
                               <Button
                                 key={book.key}
                                 variant="ghost"
-                                className="w-full justify-start h-auto py-2"
+                                className="w-full justify-start h-auto py-2 text-left"
                                 onClick={() => handleSelectBook(book)}
+                                disabled={!book.availableQuantity || book.availableQuantity <= 0}
                               >
                                 <div>
-                                  <p className="font-medium text-left">{book.title}</p>
-                                  <p className="text-xs text-muted-foreground text-left">
+                                  <p className="font-medium">{book.title}</p>
+                                  <p className="text-xs text-muted-foreground">
                                     {book.author_name?.join(', ') || 'Autor Desconhecido'} - ISBN: {book.isbn?.join(', ') || 'N/A'}
                                   </p>
-                                  <p className="text-xs text-green-600 text-left">
-                                    Disponível: {book.availableQuantity}
+                                  <p className={cn(
+                                      "text-xs",
+                                      book.availableQuantity && book.availableQuantity > 0 ? "text-green-600" : "text-red-600"
+                                    )}>
+                                    Disponível: {book.availableQuantity ?? 0}
                                   </p>
                                 </div>
                               </Button>
@@ -300,3 +308,4 @@ export function CreateLoanForm() {
     </Card>
   );
 }
+
