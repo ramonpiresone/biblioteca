@@ -34,50 +34,46 @@ export async function ensureBookExists(book: Book): Promise<void> {
     console.error('ensureBookExists called with invalid book data');
     return;
   }
-  // book.key is expected to be the plain OLID (e.g., OL123M or OL456W)
   const bookRef = doc(db, 'books', book.key);
   
   try {
     await runTransaction(db, async (transaction) => {
       const bookSnap = await transaction.get(bookRef);
       
-      const bookDataForFirestore: Partial<Book> = {
-        key: book.key, // Storing the OLID as the key field as well
-        title: book.title,
-        author_name: book.author_name || [],
-        first_publish_year: book.first_publish_year,
-        isbn: book.isbn || [],
-        cover_i: book.cover_i,
-        olid: book.olid, 
-        cover_url_small: book.cover_url_small,
-        cover_url_medium: book.cover_url_medium,
-        cover_url_large: book.cover_url_large,
-        description: book.description,
+      const dataForFirestore: Partial<Book> = {
+        key: book.key, // This is the doc ID, also stored as a field
+        title: book.title, // Assumed to be always present from Book type
+        author_name: book.author_name || [], // Default to empty array
+        isbn: book.isbn || [], // Default to empty array
         lastAccessedAt: serverTimestamp() as Timestamp,
       };
 
+      // Add optional fields only if they are defined
+      if (book.first_publish_year !== undefined) dataForFirestore.first_publish_year = book.first_publish_year;
+      if (book.cover_i !== undefined) dataForFirestore.cover_i = book.cover_i; // Critical fix for the error
+      if (book.olid !== undefined) dataForFirestore.olid = book.olid;
+      if (book.cover_url_small !== undefined) dataForFirestore.cover_url_small = book.cover_url_small;
+      if (book.cover_url_medium !== undefined) dataForFirestore.cover_url_medium = book.cover_url_medium;
+      if (book.cover_url_large !== undefined) dataForFirestore.cover_url_large = book.cover_url_large;
+      if (book.description !== undefined) dataForFirestore.description = book.description;
+      // ensureBookExists does not handle quantity fields
+      // if (book.quantity !== undefined) dataForFirestore.quantity = book.quantity;
+      // if (book.availableQuantity !== undefined) dataForFirestore.availableQuantity = book.availableQuantity;
+
+
       if (!bookSnap.exists()) {
-        transaction.set(bookRef, bookDataForFirestore);
+        // New document: set it.
+        // Firestore requires that all properties are defined, no 'undefined' values.
+        transaction.set(bookRef, dataForFirestore);
       } else {
-        transaction.set(bookRef, 
-          { 
-            lastAccessedAt: serverTimestamp() as Timestamp,
-            title: book.title, 
-            author_name: book.author_name || [],
-            isbn: book.isbn || [],
-            cover_i: book.cover_i,
-            olid: book.olid,
-            cover_url_small: book.cover_url_small,
-            cover_url_medium: book.cover_url_medium,
-            cover_url_large: book.cover_url_large,
-            description: book.description,
-          }, 
-          { merge: true }
-        );
+        // Existing document: merge it.
+        // Only the fields present in dataForFirestore will be updated.
+        transaction.set(bookRef, dataForFirestore, { merge: true });
       }
     });
   } catch (error) {
     console.error("Transaction failed for ensureBookExists: ", error);
+    throw error; // Re-throw so upstream can potentially handle it
   }
 }
 
@@ -118,23 +114,32 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
         }
     }
 
-    const bookData: Book = {
-      key: firestoreBookKey, 
-      title: bookDetailsAPI.title,
-      author_name: authors,
-      first_publish_year: publishYear,
-      isbn: bookDetailsAPI.identifiers?.isbn_13 || bookDetailsAPI.identifiers?.isbn_10 || [isbn],
-      cover_url_small: bookDetailsAPI.cover?.small,
-      cover_url_medium: bookDetailsAPI.cover?.medium,
-      cover_url_large: bookDetailsAPI.cover?.large,
-      olid: firestoreBookKey.startsWith('OL') ? firestoreBookKey : (bookDetailsAPI.identifiers?.openlibrary?.[0]),
-      description: bookDetailsAPI.subtitle || (typeof bookDetailsAPI.notes === 'string' ? bookDetailsAPI.notes : bookDetailsAPI.notes?.value),
+    const olidValue = firestoreBookKey.startsWith('OL') ? firestoreBookKey : bookDetailsAPI.identifiers?.openlibrary?.[0];
+    const descriptionValue = bookDetailsAPI.subtitle || (typeof bookDetailsAPI.notes === 'string' ? bookDetailsAPI.notes : bookDetailsAPI.notes?.value);
+
+    const dataToSave: Partial<Book> = {
+      key: firestoreBookKey,
+      title: bookDetailsAPI.title, // Assuming title is always present
+      author_name: authors.length > 0 ? authors : [], // Default to empty array
+      isbn: bookDetailsAPI.identifiers?.isbn_13 || bookDetailsAPI.identifiers?.isbn_10 || [isbn], // Should yield an array
       quantity: quantity,
       availableQuantity: quantity, 
       lastAccessedAt: serverTimestamp() as Timestamp,
     };
     
-    await setDoc(bookRef, bookData, { merge: true }); 
+    // Add optional fields only if they are defined
+    if (publishYear !== undefined) dataToSave.first_publish_year = publishYear;
+    if (bookDetailsAPI.cover?.small !== undefined) dataToSave.cover_url_small = bookDetailsAPI.cover.small;
+    if (bookDetailsAPI.cover?.medium !== undefined) dataToSave.cover_url_medium = bookDetailsAPI.cover.medium;
+    if (bookDetailsAPI.cover?.large !== undefined) dataToSave.cover_url_large = bookDetailsAPI.cover.large;
+    if (olidValue !== undefined) dataToSave.olid = olidValue;
+    if (descriptionValue !== undefined) dataToSave.description = descriptionValue;
+    // cover_i is not typically available from the ISBN details endpoint (fetchBookDetailsFromAPI),
+    // so we don't attempt to set it here. It would come from search results if ensureBookExists handles it.
+
+    await setDoc(bookRef, dataToSave, { merge: true }); 
+    // merge: true will create if it doesn't exist, and only update specified (defined) fields if it does.
+    
     console.log(`Book ${firestoreBookKey} added/updated by admin with quantity ${quantity}.`);
     
     const savedBookSnap = await getDoc(bookRef);
@@ -285,61 +290,70 @@ export async function searchLibraryBooks(
   const booksRef = collection(db, 'books');
   const searchTextLower = searchText.toLowerCase();
   
-  const titleQueryConstraints: QueryConstraint[] = [
-    orderBy('title'), 
-    startAt(searchText), 
-    endAt(searchText + '\uf8ff'), 
-    limit(searchLimit)
-  ];
+  const queryConstraints: QueryConstraint[] = [];
 
-  const isbnQueryConstraints: QueryConstraint[] = [
-    where('isbn', 'array-contains', searchText), 
-    limit(searchLimit)
-  ];
+  // Base query constraints
+  queryConstraints.push(orderBy('title')); // Order by title for text search
+  queryConstraints.push(limit(searchLimit));
 
+  // Add availability filter if requested
   if (filterByAvailability) {
-    // This needs to be the first orderBy if combined with range queries on another field.
-    // However, Firestore requires the first orderBy to be on the field used for inequality.
-    // So, we add it to both, and if availableQuantity is not the primary sort, this might be tricky.
-    // For now, this assumes availableQuantity > 0 is a filter, not a primary sort.
-    // If combined with orderBy('title'), this might require a composite index or client-side filtering for availability.
-    // Let's simplify: if filtering by availability, we might need to fetch more and filter client-side,
-    // or ensure queries are structured for Firestore's indexing.
-    // For simplicity in this step, we'll add the 'where' clause.
-    // This means if you order by title, you'd need a composite index on (availableQuantity, title).
-    // Or, filter by title first, then filter by availability client-side if this becomes an issue.
-    titleQueryConstraints.unshift(where('availableQuantity', '>', 0)); // Add to the beginning
-    isbnQueryConstraints.unshift(where('availableQuantity', '>', 0)); // Add to the beginning
+    queryConstraints.push(where('availableQuantity', '>', 0));
   }
   
+  // Build queries. Firestore limitations might require separate queries or more complex client-side merging for OR conditions.
+  // For simplicity, this example prioritizes title search and then ISBN.
+  // A more robust solution might involve a dedicated search service (e.g., Algolia, Typesense) for complex text search.
+
+  // Title search (prefix-like)
+  const titleQueryConstraints = [
+    ...queryConstraints,
+    startAt(searchText), 
+    endAt(searchText + '\uf8ff'), 
+  ];
+  
+  // ISBN search (exact match in array)
+  const isbnQueryConstraints = [
+    where('isbn', 'array-contains', searchText),
+    limit(searchLimit) // Apply limit here too
+  ];
+  if (filterByAvailability) {
+    isbnQueryConstraints.push(where('availableQuantity', '>', 0));
+  }
+
+
   const titleQuery = query(booksRef, ...titleQueryConstraints);
-  const isbnQuery = query(booksRef, ...isbnQueryConstraints);
+  const isbnQueryLookup = query(booksRef, ...isbnQueryConstraints);
   
   try {
     const [titleSnapshot, isbnSnapshot] = await Promise.all([
       getDocs(titleQuery),
-      getDocs(isbnQuery),
+      getDocs(isbnQueryLookup),
     ]);
 
     const booksMap = new Map<string, Book>();
 
     titleSnapshot.docs.forEach(docSnap => {
       const bookData = docSnap.data() as Book;
+      // Client-side refinement for case-insensitivity for title if Firestore's startAt/endAt is case-sensitive
       if (docSnap.exists() && bookData.title && bookData.title.toLowerCase().startsWith(searchTextLower)) { 
         booksMap.set(docSnap.id, { ...bookData, key: docSnap.id });
       }
     });
 
     isbnSnapshot.docs.forEach(docSnap => {
-      if (docSnap.exists()) {
+      if (docSnap.exists()) { // ISBN match is exact so no further client-side check needed
          booksMap.set(docSnap.id, { ...docSnap.data(), key: docSnap.id } as Book);
       }
     });
     
-    return Array.from(booksMap.values()).slice(0, searchLimit);
+    return Array.from(booksMap.values()).slice(0, searchLimit); // Ensure final limit
 
   } catch (error) {
     console.error("Error searching library books:", error);
     return [];
   }
 }
+
+
+    
