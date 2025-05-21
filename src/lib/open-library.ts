@@ -52,7 +52,6 @@ export async function searchBooks(query: string, limit: number = 20, signal?: Ab
         isbn: doc.isbn,
         cover_i: doc.cover_i,
         olid: olid,
-        // description: "Descrição não disponível através da busca geral.", // Removed as per previous request to not use AI features
         cover_url_small: covers.small,
         cover_url_medium: covers.medium,
         cover_url_large: covers.large,
@@ -86,6 +85,8 @@ export async function getBookDetailsByISBN(isbn: string, signal?: AbortSignal): 
     }
     const data: OpenLibraryBookData = await response.json();
     const bookKey = `ISBN:${isbn}`;
+    // The API returns an object where the key is `ISBN:${isbn}`
+    // and the value is the book details.
     return data[bookKey] || null;
   } catch (error: any) {
     if (error.name === 'AbortError') {

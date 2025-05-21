@@ -41,18 +41,32 @@ export interface OpenLibraryBookData {
 }
 
 export interface OpenLibraryBookDetails {
-  publishers?: { name: string }[];
-  subtitle?: string;
+  url?: string; // e.g., "https://openlibrary.org/books/OL30678200M/Pai_Rico_Pai_Pobre"
+  key?: string; // e.g., "/books/OL30678200M"
   title: string;
-  url?: string;
+  subtitle?: string;
+  authors?: { url?: string; name: string }[];
   number_of_pages?: number;
+  identifiers?: {
+    isbn_10?: string[];
+    isbn_13?: string[];
+    openlibrary?: string[];
+  };
+  publishers?: { name: string }[];
+  publish_date?: string; // e.g. "Oct 20, 2017"
+  subjects?: { name: string; url: string }[];
+  notes?: string; // Can be general notes or source information
+  links?: { title: string; url: string }[];
   cover?: {
     small?: string;
     medium?: string;
     large?: string;
   };
-  publish_date?: string; // e.g. "June 1, 2000"
-  authors?: { url?: string; name: string }[];
-  excerpts?: { text: string, comment: string }[];
-  // There are many other fields like classifications, links, etc.
+  // Removed 'excerpts' as it's not in the provided example structure.
+}
+
+// Type for AI Analysis (currently unused as AI features were removed)
+export interface AiAnalysis {
+  synopsis: string;
+  genres: string; // Comma-separated list
 }

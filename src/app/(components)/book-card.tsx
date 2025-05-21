@@ -14,8 +14,9 @@ export function BookCard({ book }: BookCardProps) {
   const authorText = book.author_name?.join(', ') || 'Autor Desconhecido';
   const publishYearText = book.first_publish_year ? `Publicado em: ${book.first_publish_year}` : '';
 
-  const coverUrl = book.cover_url_medium || book.cover_url_small || `https://placehold.co/300x450.png?text=${encodeURIComponent(book.title)}`;
-  const placeholderHint = !book.cover_url_medium && !book.cover_url_small ? "book cover" : undefined;
+  // Prioritize large cover, then medium, then small, then placeholder
+  const coverUrl = book.cover_url_large || book.cover_url_medium || book.cover_url_small || `https://placehold.co/300x450.png?text=${encodeURIComponent(book.title)}`;
+  const placeholderHint = !book.cover_url_large && !book.cover_url_medium && !book.cover_url_small ? "book cover" : undefined;
 
   return (
     <>
