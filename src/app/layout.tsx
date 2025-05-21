@@ -4,6 +4,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { SiteHeader } from '@/app/(components)/site-header';
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/contexts/auth-context';
+import { AppInitializer } from '@/components/app-initializer';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -27,17 +29,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <div className="flex flex-col min-h-screen">
-          <SiteHeader />
-          <main className="flex-grow container mx-auto px-4 py-8">
-            {children}
-          </main>
-          <footer className="py-6 text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} BiblioTech Lite. Todos os direitos reservados.
-          </footer>
-        </div>
-        <Toaster />
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
+        <AuthProvider>
+          <AppInitializer>
+            <div className="flex flex-col min-h-screen">
+              <SiteHeader />
+              <main className="flex-grow container mx-auto px-4 py-8">
+                {children}
+              </main>
+              <footer className="py-6 text-center text-sm text-muted-foreground border-t">
+                © {new Date().getFullYear()} BiblioTech Lite. Todos os direitos reservados.
+              </footer>
+            </div>
+            <Toaster />
+          </AppInitializer>
+        </AuthProvider>
       </body>
     </html>
   );
