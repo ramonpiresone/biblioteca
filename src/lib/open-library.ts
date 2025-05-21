@@ -52,13 +52,14 @@ export async function searchBooks(query: string, limit: number = 20): Promise<Bo
         isbn: doc.isbn,
         cover_i: doc.cover_i,
         olid: olid,
+        description: "Descrição não disponível através da busca geral.", // Adicionando uma descrição placeholder
         cover_url_small: covers.small,
         cover_url_medium: covers.medium,
         cover_url_large: covers.large,
       };
     });
   } catch (error) {
-    console.error('Failed to fetch books from Open Library:', error);
+    console.error('Falha ao buscar livros da Open Library:', error);
     return [];
   }
 }
@@ -83,7 +84,8 @@ export async function getBookDetailsByISBN(isbn: string): Promise<OpenLibraryBoo
     const bookKey = `ISBN:${isbn}`;
     return data[bookKey] || null;
   } catch (error) {
-    console.error('Failed to fetch book details from Open Library:', error);
+    console.error('Falha ao buscar detalhes do livro da Open Library:', error);
     return null;
   }
 }
+
