@@ -27,7 +27,7 @@ export interface CreateLoanInput {
   borrowerCPF: string; // CPF of the person borrowing the book
   bookKey: string;
   bookTitle: string;
-  dueDate: Date; // Changed from Timestamp to Date
+  dueDate: Date; 
 }
 
 
@@ -61,7 +61,7 @@ export async function createLoan(
       });
 
       // Create loan document
-      const loanWithTimestamps: Loan = {
+      const loanWithTimestamps: Omit<Loan, 'id' | 'loanDate' | 'dueDate' | 'returnDate' | 'createdAt'> & { loanDate: Timestamp, dueDate: Timestamp, returnDate?: Timestamp, createdAt: Timestamp } = {
         userId: loanDetails.userId, // Admin's UID
         userDisplayName: loanDetails.userDisplayName, // Admin's name
         userEmail: loanDetails.userEmail, // Admin's email
@@ -87,8 +87,9 @@ export async function createLoan(
 
 /**
  * Fetches all loans for a given user, ordered by loan date descending.
+ * Converts Timestamps to JS Date objects.
  * @param userId The ID of the user.
- * @returns A promise that resolves to an array of Loan objects.
+ * @returns A promise that resolves to an array of Loan objects with JS Dates.
  */
 export async function getUserLoans(userId: string): Promise<Loan[]> {
   if (!userId) return [];
@@ -96,14 +97,22 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
   const loansColRef = collection(db, 'loans');
   const q = query(
     loansColRef,
-    where('userId', '==', userId), // This might need to change if we want to find loans by borrowerCPF
+    where('userId', '==', userId), 
     orderBy('loanDate', 'desc')
   );
   const loansSnapshot = await getDocs(q);
 
-  return loansSnapshot.docs.map(
-    (docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Loan)
-  );
+  return loansSnapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      ...data,
+      loanDate: (data.loanDate as Timestamp)?.toDate(),
+      dueDate: (data.dueDate as Timestamp)?.toDate(),
+      returnDate: (data.returnDate as Timestamp)?.toDate() || null,
+      createdAt: (data.createdAt as Timestamp)?.toDate(),
+    } as Loan;
+  });
 }
 
 /**
@@ -125,7 +134,7 @@ export async function returnBook(loanId: string): Promise<void> {
       if (!loanSnap.exists()) {
         throw new Error(`Empréstimo com ID ${loanId} não encontrado.`);
       }
-      const loanData = loanSnap.data() as Loan;
+      const loanData = loanSnap.data() as Loan; // Assuming this comes with Timestamps initially
       if (loanData.status === 'returned') {
         console.warn(`Empréstimo ${loanId} já está marcado como devolvido.`);
         return;
@@ -157,8 +166,8 @@ export async function returnBook(loanId: string): Promise<void> {
 
 /**
  * Fetches all loans from the database, ordered by loan date descending.
- * Intended for admin use.
- * @returns A promise that resolves to an array of Loan objects.
+ * Intended for admin use. Converts Timestamps to JS Date objects.
+ * @returns A promise that resolves to an array of Loan objects with JS Dates.
  */
 export async function getAllLoans(): Promise<Loan[]> {
   const loansColRef = collection(db, 'loans');
@@ -169,8 +178,16 @@ export async function getAllLoans(): Promise<Loan[]> {
   );
   const loansSnapshot = await getDocs(q);
 
-  return loansSnapshot.docs.map(
-    (docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Loan)
-  );
+  return loansSnapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    // Convert Firestore Timestamps to JS Date objects
+    return {
+      id: docSnap.id,
+      ...data,
+      loanDate: (data.loanDate as Timestamp)?.toDate(),
+      dueDate: (data.dueDate as Timestamp)?.toDate(),
+      returnDate: (data.returnDate as Timestamp)?.toDate() || null,
+      createdAt: (data.createdAt as Timestamp)?.toDate(),
+    } as Loan;
+  });
 }
-
