@@ -15,6 +15,9 @@ import {
   where,
   documentId,
   runTransaction,
+  limit,
+  startAt,
+  endAt,
 } from 'firebase/firestore';
 import type { Book, FavoriteRecord, OpenLibraryBookDetails } from '@/types';
 import { getBookDetailsByISBN as fetchBookDetailsFromAPI } from '@/lib/open-library';
@@ -100,8 +103,6 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
       return null;
     }
     
-    // Extract the OLID (e.g., OLXXXXM) from the full key path (e.g., /books/OLXXXXM or /works/OLXXXXW)
-    // This OLID will be used as the Firestore document ID.
     const firestoreBookKey = bookDetailsAPI.key.split('/').pop();
     if (!firestoreBookKey) {
         console.error(`Could not extract OLID from bookDetailsAPI.key: ${bookDetailsAPI.key}`);
@@ -111,7 +112,6 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
     const bookRef = doc(db, 'books', firestoreBookKey);
 
     const authors = bookDetailsAPI.authors?.map(a => a.name) || [];
-    // Attempt to parse publish year. API returns full date string like "Oct 20, 2017" or just "2017".
     let publishYear: number | undefined = undefined;
     if (bookDetailsAPI.publish_date) {
         const yearMatch = bookDetailsAPI.publish_date.match(/\d{4}/);
@@ -121,7 +121,7 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
     }
 
     const bookData: Book = {
-      key: firestoreBookKey, // Use the extracted OLID as the key field in the document data
+      key: firestoreBookKey, 
       title: bookDetailsAPI.title,
       author_name: authors,
       first_publish_year: publishYear,
@@ -129,20 +129,19 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
       cover_url_small: bookDetailsAPI.cover?.small,
       cover_url_medium: bookDetailsAPI.cover?.medium,
       cover_url_large: bookDetailsAPI.cover?.large,
-      // Use the extracted OLID for the olid field as well for consistency if it's an edition OLID
       olid: firestoreBookKey.startsWith('OL') ? firestoreBookKey : (bookDetailsAPI.identifiers?.openlibrary?.[0]),
-      description: bookDetailsAPI.subtitle || bookDetailsAPI.notes, // Prefer subtitle if available
+      description: bookDetailsAPI.subtitle || (typeof bookDetailsAPI.notes === 'string' ? bookDetailsAPI.notes : bookDetailsAPI.notes?.value),
       quantity: quantity,
-      availableQuantity: quantity,
+      availableQuantity: quantity, // Initially, all are available
       lastAccessedAt: serverTimestamp() as Timestamp,
     };
     
-    await setDoc(bookRef, bookData, { merge: true });
+    await setDoc(bookRef, bookData, { merge: true }); // Merge true to update if exists
     console.log(`Book ${firestoreBookKey} added/updated by admin with quantity ${quantity}.`);
     
     const savedBookSnap = await getDoc(bookRef);
     if (savedBookSnap.exists()) {
-        return { ...savedBookSnap.data(), key: savedBookSnap.id } as Book; // Ensure key is the doc ID
+        return { ...savedBookSnap.data(), key: savedBookSnap.id } as Book;
     }
     return null;
 
@@ -164,10 +163,9 @@ export async function addFavorite(userId: string, book: Book): Promise<void> {
     return;
   }
   await ensureBookExists(book); 
-  // book.key is the OLID, used as document ID in 'favorites' subcollection
   const favoriteRef = doc(db, 'users', userId, 'favorites', book.key); 
   const favoriteData: FavoriteRecord = {
-    bookKey: book.key, // Storing the OLID here as well
+    bookKey: book.key, 
     favoritedAt: serverTimestamp() as Timestamp,
   };
   await setDoc(favoriteRef, favoriteData);
@@ -214,7 +212,7 @@ export async function getFavoriteBooks(userId: string): Promise<Book[]> {
   const favoritesSnapshot = await getDocs(q);
 
   const favoriteBookKeys = favoritesSnapshot.docs
-    .map((docSnap) => (docSnap.data() as FavoriteRecord).bookKey) // These keys are OLIDs
+    .map((docSnap) => (docSnap.data() as FavoriteRecord).bookKey) 
     .filter(key => !!key); 
 
   if (favoriteBookKeys.length === 0) {
@@ -222,29 +220,88 @@ export async function getFavoriteBooks(userId: string): Promise<Book[]> {
   }
 
   const books: Book[] = [];
-  // Firestore 'in' queries are limited to 30 elements in the array
   const CHUNK_SIZE = 30; 
   for (let i = 0; i < favoriteBookKeys.length; i += CHUNK_SIZE) {
       const chunk = favoriteBookKeys.slice(i, i + CHUNK_SIZE);
       if (chunk.length > 0) {
-        // Query 'books' collection where document ID is in the chunk of OLIDs
         const booksQuery = query(collection(db, 'books'), where(documentId(), 'in', chunk));
         const booksSnapshot = await getDocs(booksQuery);
         booksSnapshot.forEach((bookDoc) => {
         if (bookDoc.exists()) {
-            // bookDoc.id is the OLID, which should match bookDoc.data().key
             books.push({ ...bookDoc.data(), key: bookDoc.id } as Book);
         }
         });
       }
   }
   
-  // Sort the fetched books based on the original favoritedAt order
   const sortedBooks = books.sort((a, b) => {
-    const aIndex = favoriteBookKeys.indexOf(a.key); // a.key is OLID
-    const bIndex = favoriteBookKeys.indexOf(b.key); // b.key is OLID
+    const aIndex = favoriteBookKeys.indexOf(a.key); 
+    const bIndex = favoriteBookKeys.indexOf(b.key); 
     return aIndex - bIndex;
   });
 
   return sortedBooks;
+}
+
+/**
+ * Searches books in the local library inventory.
+ * Matches against title (case-insensitive prefix) and ISBNs.
+ * Only returns books with availableQuantity > 0.
+ * @param searchText The text to search for.
+ * @param searchLimit Max number of books to return.
+ * @returns A promise that resolves to an array of Book objects.
+ */
+export async function searchLibraryBooks(searchText: string, searchLimit: number = 10): Promise<Book[]> {
+  if (!searchText.trim()) {
+    return [];
+  }
+
+  const booksRef = collection(db, 'books');
+  const searchTextLower = searchText.toLowerCase();
+  const searchTextUpper = searchTextLower + '\uf8ff'; // Firestore string range query trick for prefix
+
+  // Query for title prefix match
+  const titleQuery = query(
+    booksRef,
+    where('availableQuantity', '>', 0),
+    orderBy('title'), // Firestore requires orderBy on the field used in range queries
+    startAt(searchText), 
+    endAt(searchText + '\uf8ff'), // \uf8ff is a very high code point character
+    limit(searchLimit)
+  );
+
+  // Query for ISBN match
+  const isbnQuery = query(
+    booksRef,
+    where('availableQuantity', '>', 0),
+    where('isbn', 'array-contains', searchText), // Assumes searchText is a potential ISBN
+    limit(searchLimit)
+  );
+  
+  try {
+    const [titleSnapshot, isbnSnapshot] = await Promise.all([
+      getDocs(titleQuery),
+      getDocs(isbnQuery),
+    ]);
+
+    const booksMap = new Map<string, Book>();
+
+    titleSnapshot.docs.forEach(docSnap => {
+      if (docSnap.exists() && docSnap.data().title.toLowerCase().startsWith(searchTextLower)) { // Client-side refinement for case-insensitivity
+        booksMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Book);
+      }
+    });
+
+    isbnSnapshot.docs.forEach(docSnap => {
+      if (docSnap.exists()) {
+         booksMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Book);
+      }
+    });
+    
+    return Array.from(booksMap.values()).slice(0, searchLimit);
+
+  } catch (error) {
+    console.error("Error searching library books:", error);
+    return [];
+  }
 }

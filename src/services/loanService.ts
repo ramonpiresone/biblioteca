@@ -17,31 +17,42 @@ import {
   getDoc,
   writeBatch,
 } from 'firebase/firestore';
-import type { Loan, Book } from '@/types'; // Ensure Book is imported
+import type { Loan, Book } from '@/types'; 
+
+// Define a more specific input type for creating loans
+export interface CreateLoanInput {
+  userId: string; // UID of the user initiating the loan (e.g., admin)
+  userDisplayName?: string;
+  userEmail?: string;
+  borrowerCPF: string; // CPF of the person borrowing the book
+  bookKey: string;
+  bookTitle: string;
+  dueDate: Timestamp;
+}
+
 
 /**
  * Creates a new loan record in Firestore and decrements book availability.
  * Transactional.
- * @param loanData Data for the new loan. Must include userId, bookKey, bookTitle, dueDate.
- *                 Optional: userDisplayName, userEmail.
+ * @param loanDetails Data for the new loan, including admin's UID and borrower's CPF.
  * @returns The ID of the newly created loan document.
  * @throws Error if the book is not available or other Firestore errors.
  */
 export async function createLoan(
-  loanData: Omit<Loan, 'id' | 'loanDate' | 'status' | 'createdAt' | 'returnDate'>
+  loanDetails: CreateLoanInput
 ): Promise<string> {
-  const bookRef = doc(db, 'books', loanData.bookKey);
+  const bookRef = doc(db, 'books', loanDetails.bookKey);
 
   try {
     const loanId = await runTransaction(db, async (transaction) => {
       const bookSnap = await transaction.get(bookRef);
       if (!bookSnap.exists()) {
-        throw new Error(`Book with key ${loanData.bookKey} not found.`);
+        throw new Error(`Livro com chave ${loanDetails.bookKey} não encontrado.`);
       }
 
       const bookData = bookSnap.data() as Book;
       if (bookData.availableQuantity === undefined || bookData.availableQuantity <= 0) {
-        throw new Error(`Book "${bookData.title}" is not available for loan.`);
+        throw new Error(`Livro "${bookData.title}" não está disponível para empréstimo.`);
       }
 
       // Decrement available quantity
@@ -50,22 +61,27 @@ export async function createLoan(
       });
 
       // Create loan document
-      const loanWithTimestamps: Omit<Loan, 'id'> = {
-        ...loanData,
+      const loanWithTimestamps: Loan = {
+        userId: loanDetails.userId, // Admin's UID
+        userDisplayName: loanDetails.userDisplayName, // Admin's name
+        userEmail: loanDetails.userEmail, // Admin's email
+        borrowerCPF: loanDetails.borrowerCPF,
+        bookKey: loanDetails.bookKey,
+        bookTitle: loanDetails.bookTitle,
+        dueDate: loanDetails.dueDate,
         loanDate: serverTimestamp() as Timestamp,
         status: 'active',
         createdAt: serverTimestamp() as Timestamp,
       };
-      // Firestore does not return the doc ref inside a transaction when using addDoc
-      // So we create a new doc ref first, then set it within the transaction
+      
       const newLoanRef = doc(collection(db, 'loans'));
       transaction.set(newLoanRef, loanWithTimestamps);
       return newLoanRef.id;
     });
     return loanId;
   } catch (error) {
-    console.error("Failed to create loan:", error);
-    throw error; // Re-throw to be caught by caller
+    console.error("Falha ao criar empréstimo:", error);
+    throw error; 
   }
 }
 
@@ -80,7 +96,7 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
   const loansColRef = collection(db, 'loans');
   const q = query(
     loansColRef,
-    where('userId', '==', userId),
+    where('userId', '==', userId), // This might need to change if we want to find loans by borrowerCPF
     orderBy('loanDate', 'desc')
   );
   const loansSnapshot = await getDocs(q);
@@ -99,7 +115,7 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
 export async function returnBook(loanId: string): Promise<void> {
   if (!loanId) {
     console.error("returnBook called with invalid loanId");
-    throw new Error("Loan ID is required.");
+    throw new Error("ID do empréstimo é obrigatório.");
   }
   const loanRef = doc(db, 'loans', loanId);
 
@@ -107,38 +123,34 @@ export async function returnBook(loanId: string): Promise<void> {
     await runTransaction(db, async (transaction) => {
       const loanSnap = await transaction.get(loanRef);
       if (!loanSnap.exists()) {
-        throw new Error(`Loan with ID ${loanId} not found.`);
+        throw new Error(`Empréstimo com ID ${loanId} não encontrado.`);
       }
       const loanData = loanSnap.data() as Loan;
       if (loanData.status === 'returned') {
-        // Already returned, nothing to do
-        console.warn(`Loan ${loanId} is already marked as returned.`);
+        console.warn(`Empréstimo ${loanId} já está marcado como devolvido.`);
         return;
       }
 
       const bookRef = doc(db, 'books', loanData.bookKey);
       const bookSnap = await transaction.get(bookRef);
       if (!bookSnap.exists()) {
-        // This case should be rare if data integrity is maintained
-        throw new Error(`Book with key ${loanData.bookKey} associated with loan ${loanId} not found.`);
+        throw new Error(`Livro com chave ${loanData.bookKey} associado ao empréstimo ${loanId} não encontrado.`);
       }
       const bookData = bookSnap.data() as Book;
 
-      // Increment available quantity, ensuring it doesn't exceed total quantity
       const newAvailableQuantity = (bookData.availableQuantity ?? 0) + 1;
       transaction.update(bookRef, {
         availableQuantity: Math.min(newAvailableQuantity, bookData.quantity ?? newAvailableQuantity),
       });
 
-      // Update loan status
       transaction.update(loanRef, {
         status: 'returned',
         returnDate: serverTimestamp() as Timestamp,
       });
     });
   } catch (error) {
-    console.error(`Failed to return book for loan ${loanId}:`, error);
-    throw error; // Re-throw to be caught by caller
+    console.error(`Falha ao devolver livro para o empréstimo ${loanId}:`, error);
+    throw error; 
   }
 }
 
@@ -150,10 +162,9 @@ export async function returnBook(loanId: string): Promise<void> {
  */
 export async function getAllLoans(): Promise<Loan[]> {
   const loansColRef = collection(db, 'loans');
-  // Order by status first (active loans on top), then by loanDate
   const q = query(
     loansColRef,
-    orderBy('status', 'asc'), // 'active' comes before 'returned'
+    orderBy('status', 'asc'), 
     orderBy('loanDate', 'desc')
   );
   const loansSnapshot = await getDocs(q);
@@ -162,3 +173,4 @@ export async function getAllLoans(): Promise<Loan[]> {
     (docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Loan)
   );
 }
+

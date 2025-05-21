@@ -89,9 +89,10 @@ export interface FavoriteRecord {
 
 export interface Loan {
   id?: string; // Firestore document ID
-  userId: string;
-  userDisplayName?: string; // Denormalized for admin display
-  userEmail?: string; // Denormalized for admin display
+  userId: string; // UID of the user who initiated the loan (admin or borrower if self-service)
+  userDisplayName?: string; // Denormalized for admin display (admin's name or borrower's name)
+  userEmail?: string; // Denormalized for admin display (admin's email or borrower's email)
+  borrowerCPF: string; // CPF of the person borrowing the book
   bookKey: string; // Firestore document ID of the book (OLID)
   bookTitle: string; // Denormalized for easy display
   loanDate: Timestamp;
@@ -100,3 +101,4 @@ export interface Loan {
   status: 'active' | 'returned';
   createdAt: Timestamp;
 }
+
