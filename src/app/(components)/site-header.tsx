@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { BookOpen, Home, Heart, LogOut } from 'lucide-react';
+import { BookOpen, Home, Heart, LogOut, ShieldCheck } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
@@ -19,14 +19,23 @@ import {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { user, signOutUser, loading } = useAuth();
+  const { user, firestoreUser, signOutUser, loading } = useAuth();
 
   const navItems = [
-    { href: '/', label: 'Início', icon: Home, requiresAuth: false },
-    { href: '/favorites', label: 'Favoritos', icon: Heart, requiresAuth: true },
+    { href: '/', label: 'Início', icon: Home, requiresAuth: false, adminOnly: false },
+    { href: '/favorites', label: 'Favoritos', icon: Heart, requiresAuth: true, adminOnly: false },
+    { href: '/admin', label: 'Gerenciar', icon: ShieldCheck, requiresAuth: true, adminOnly: true },
   ];
 
-  const visibleNavItems = navItems.filter(item => !item.requiresAuth || (item.requiresAuth && user));
+  const visibleNavItems = navItems.filter(item => {
+    if (item.adminOnly) {
+      return firestoreUser?.roles?.admin;
+    }
+    if (item.requiresAuth) {
+      return !!user;
+    }
+    return true;
+  });
 
   const getUserInitials = (name?: string | null, email?: string | null) => {
     if (name) {
@@ -77,7 +86,7 @@ export function SiteHeader() {
                 <Button variant="ghost" className="flex items-center gap-2 p-1 rounded-full h-auto focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0">
                   {user.displayName && (
                     <span className="text-sm font-medium hidden sm:inline-block text-card-foreground">
-                      {user.displayName.split(' ')[0]} {/* Mostra apenas o primeiro nome */}
+                      {user.displayName.split(' ')[0]}
                     </span>
                   )}
                   <Avatar className="h-8 w-8">
@@ -93,6 +102,9 @@ export function SiteHeader() {
                     <p className="text-xs leading-none text-muted-foreground">
                       {user.email}
                     </p>
+                    {firestoreUser?.roles?.admin && (
+                        <p className="text-xs leading-none text-accent-foreground bg-accent/20 px-1 py-0.5 rounded-sm w-fit mt-1">Admin</p>
+                    )}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />

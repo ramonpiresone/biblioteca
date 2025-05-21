@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Book {
@@ -13,6 +14,8 @@ export interface Book {
   cover_url_large?: string;
   description?: string; // Added for storing more detailed description
   lastAccessedAt?: Timestamp; // For Firestore book collection
+  quantity?: number; // Total quantity of this book
+  availableQuantity?: number; // Quantity currently available for loan
 }
 
 export interface OpenLibrarySearchDoc {
@@ -83,6 +86,8 @@ export interface FavoriteRecord {
 export interface Loan {
   id?: string; // Firestore document ID
   userId: string;
+  userDisplayName?: string; // Denormalized for admin display
+  userEmail?: string; // Denormalized for admin display
   bookKey: string; // Reference to the book's key in the 'books' collection
   bookTitle: string; // Denormalized for easy display
   loanDate: Timestamp;
@@ -91,3 +96,4 @@ export interface Loan {
   status: 'active' | 'returned'; // 'active' or 'returned'
   createdAt: Timestamp;
 }
+
