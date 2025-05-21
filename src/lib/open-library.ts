@@ -29,7 +29,7 @@ export async function searchBooks(query: string, limit: number = 20, signal?: Ab
   }
   const params = new URLSearchParams({
     q: query,
-    fields: 'key,title,author_name,first_publish_year,isbn,cover_i,olid',
+    fields: 'key,title,author_name,first_publish_year,isbn,cover_i,olid,edition_key', // Added edition_key
     limit: limit.toString(),
   });
 
@@ -43,15 +43,31 @@ export async function searchBooks(query: string, limit: number = 20, signal?: Ab
     
     return data.docs.map((doc): Book => {
       const covers = getCoverUrls(doc);
-      const olid = doc.olid && doc.olid.length > 0 ? doc.olid[0] : undefined;
+      
+      // Determine the primary OLID to use as our internal key.
+      // Prefer edition OLID if available (from doc.olid or doc.edition_key), otherwise use work OLID.
+      let primaryOlid: string | undefined = undefined;
+      if (doc.olid && doc.olid.length > 0) {
+        primaryOlid = doc.olid[0];
+      } else if (doc.edition_key && doc.edition_key.length > 0) {
+        primaryOlid = doc.edition_key[0];
+      }
+      
+      // If no edition OLID, extract OLID from the work key (e.g., "OL27448W" from "/works/OL27448W")
+      if (!primaryOlid && doc.key) {
+        primaryOlid = doc.key.split('/').pop();
+      }
+      // Fallback if somehow primaryOlid is still not set (should be rare)
+      const bookKey = primaryOlid || doc.key || `unknown_key_${Math.random()}`;
+
       return {
-        key: doc.key,
+        key: bookKey, // This is the OLID (e.g., OL...W or OL...M) to be used as Firestore doc ID
         title: doc.title,
         author_name: doc.author_name,
         first_publish_year: doc.first_publish_year,
         isbn: doc.isbn,
         cover_i: doc.cover_i,
-        olid: olid,
+        olid: (doc.olid && doc.olid.length > 0) ? doc.olid[0] : ((doc.edition_key && doc.edition_key.length > 0) ? doc.edition_key[0] : undefined),
         cover_url_small: covers.small,
         cover_url_medium: covers.medium,
         cover_url_large: covers.large,
