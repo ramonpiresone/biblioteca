@@ -10,7 +10,7 @@ interface BookListProps {
 
 export function BookList({ books }: BookListProps) {
   if (books.length === 0) {
-    return <p className="text-center text-muted-foreground mt-8">No books found.</p>;
+    return <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado.</p>;
   }
 
   return (

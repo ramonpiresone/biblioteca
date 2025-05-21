@@ -30,9 +30,9 @@ export function FavoritesToggleButton({ book, className }: FavoritesToggleButton
       variant="ghost"
       size="icon"
       onClick={handleToggleFavorite}
-      aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+      aria-label={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
       className={cn("text-muted-foreground hover:text-destructive", favorite && "text-destructive", className)}
-      title={favorite ? "Remove from favorites" : "Add to favorites"}
+      title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
     >
       <Heart fill={favorite ? 'currentColor' : 'none'} className="h-5 w-5" />
     </Button>

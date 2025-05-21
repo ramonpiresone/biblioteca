@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'BiblioTech Lite',
-  description: 'A modern library management application.',
+  description: 'Um aplicativo moderno de gerenciamento de biblioteca.',
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         <div className="flex flex-col min-h-screen">
           <SiteHeader />
@@ -34,7 +34,7 @@ export default function RootLayout({
             {children}
           </main>
           <footer className="py-6 text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} BiblioTech Lite. All rights reserved.
+            © {new Date().getFullYear()} BiblioTech Lite. Todos os direitos reservados.
           </footer>
         </div>
         <Toaster />

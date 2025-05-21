@@ -11,8 +11,8 @@ interface BookCardProps {
 }
 
 export function BookCard({ book }: BookCardProps) {
-  const authorText = book.author_name?.join(', ') || 'Unknown Author';
-  const publishYearText = book.first_publish_year ? `First published: ${book.first_publish_year}` : '';
+  const authorText = book.author_name?.join(', ') || 'Autor Desconhecido';
+  const publishYearText = book.first_publish_year ? `Publicado em: ${book.first_publish_year}` : '';
 
   const coverUrl = book.cover_url_medium || book.cover_url_small || `https://placehold.co/300x450.png?text=${encodeURIComponent(book.title)}`;
   const placeholderHint = !book.cover_url_medium && !book.cover_url_small ? "book cover" : undefined;
@@ -32,7 +32,7 @@ export function BookCard({ book }: BookCardProps) {
           <div className="relative w-full aspect-[2/3] mb-4 rounded overflow-hidden bg-muted">
             <Image
               src={coverUrl}
-              alt={`Cover of ${book.title}`}
+              alt={`Capa de ${book.title}`}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               style={{ objectFit: 'cover' }}

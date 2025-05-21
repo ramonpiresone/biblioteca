@@ -38,7 +38,7 @@ export default function HomePage() {
       setResults(books);
     } catch (e) {
       console.error("Search failed:", e);
-      setError("Failed to fetch books. Please try again later.");
+      setError("Falha ao buscar livros. Por favor, tente novamente mais tarde.");
       setResults([]);
     } finally {
       setIsLoading(false);
@@ -58,9 +58,9 @@ export default function HomePage() {
   
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-center text-primary">Welcome to BiblioTech Lite</h1>
+      <h1 className="text-3xl font-bold text-center text-primary">Bem-vindo ao BiblioTech Lite</h1>
       <p className="text-center text-muted-foreground">
-        Explore a vast collection of books. Search, favorite, and get AI-powered insights.
+        Explore uma vasta coleção de livros. Pesquise e adicione aos favoritos.
       </p>
       
       <BookSearch query={query} setQuery={setQuery} />
@@ -70,13 +70,13 @@ export default function HomePage() {
       {error && !isLoading && (
         <Alert variant="destructive" className="my-8">
           <Terminal className="h-4 w-4" />
-          <AlertTitle>Search Error</AlertTitle>
+          <AlertTitle>Erro na Busca</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {!isLoading && !error && results.length === 0 && !initialLoad && query.trim() !== '' && (
-         <p className="text-center text-muted-foreground mt-8">No books found for &quot;{query}&quot;.</p>
+         <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado para &quot;{query}&quot;.</p>
       )}
 
       {!isLoading && !error && (results.length > 0 || (initialLoad && query === '')) && (
@@ -84,7 +84,7 @@ export default function HomePage() {
       )}
       
       {!isLoading && !error && results.length === 0 && query.trim() === '' && !initialLoad && (
-         <p className="text-center text-muted-foreground mt-8">Start typing to search for books.</p>
+         <p className="text-center text-muted-foreground mt-8">Comece a digitar para buscar livros.</p>
       )}
     </div>
   );

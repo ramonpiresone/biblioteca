@@ -7,8 +7,8 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/favorites', label: 'Favorites', icon: Heart },
+  { href: '/', label: 'Início', icon: Home },
+  { href: '/favorites', label: 'Favoritos', icon: Heart },
 ];
 
 export function SiteHeader() {

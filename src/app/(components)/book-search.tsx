@@ -11,7 +11,7 @@ interface BookSearchProps {
   placeholder?: string;
 }
 
-export function BookSearch({ query, setQuery, placeholder = "Search books by title, author, or ISBN..." }: BookSearchProps) {
+export function BookSearch({ query, setQuery, placeholder = "Buscar livros por título, autor ou ISBN..." }: BookSearchProps) {
   return (
     <div className="relative mb-8">
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -23,7 +23,7 @@ export function BookSearch({ query, setQuery, placeholder = "Search books by tit
         onChange={(e) => setQuery(e.target.value)}
         placeholder={placeholder}
         className="pl-10 pr-4 py-2 w-full text-base rounded-md shadow-sm"
-        aria-label="Search books"
+        aria-label="Buscar livros"
       />
     </div>
   );

@@ -16,12 +16,12 @@ export default function FavoritesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-primary">Your Favorite Books</h1>
+      <h1 className="text-3xl font-bold text-primary">Seus Livros Favoritos</h1>
       {favorites.length === 0 ? (
         <div className="text-center py-10">
-          <p className="text-muted-foreground mb-4">You haven&apos;t added any books to your favorites yet.</p>
+          <p className="text-muted-foreground mb-4">Você ainda não adicionou nenhum livro aos seus favoritos.</p>
           <Button asChild>
-            <Link href="/">Explore Books</Link>
+            <Link href="/">Explorar Livros</Link>
           </Button>
         </div>
       ) : (
