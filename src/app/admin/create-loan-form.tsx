@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -37,10 +36,14 @@ import { searchLibraryBooks } from '@/services/bookService';
 import { createLoan, type CreateLoanInput } from '@/services/loanService';
 import type { Book } from '@/types';
 import { cn } from '@/lib/utils';
+import { validateCPF } from '@/lib/validation';
 
 const createLoanSchema = z.object({
-  borrowerCPF: z.string().min(11, { message: "CPF deve ter pelo menos 11 dígitos." }).max(14, { message: "CPF inválido."})
-    .regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "Formato de CPF inválido. Use XXX.XXX.XXX-XX ou XXXXXXXXXXX."}),
+  borrowerCPF: z.string()
+    .min(11, { message: "CPF deve ter 11 dígitos." })
+    .max(14, { message: "CPF não pode ter mais que 14 caracteres." })
+    .regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "Formato de CPF inválido. Use XXX.XXX.XXX-XX ou XXXXXXXXXXX." })
+    .refine((cpf) => validateCPF(cpf), { message: "CPF inválido. Verifique os dígitos." }),
   dueDate: z.date({
     required_error: "Data de devolução é obrigatória.",
   }),
@@ -163,9 +166,27 @@ export function CreateLoanForm() {
               name="borrowerCPF"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>CPF do Mutuário</FormLabel>
+                  <FormLabel>CPF</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: 123.456.789-00 ou 12345678900" {...field} />
+                    <Input
+                      placeholder="Ex: 123.456.789-00"
+                      value={field.value}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/\D/g, ''); // Remove tudo que não é dígito
+                        if (value.length <= 11) { // Limita a 11 dígitos
+                          // Aplica a máscara
+                          if (value.length > 9) {
+                            value = value.replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, '$1.$2.$3-$4');
+                          } else if (value.length > 6) {
+                            value = value.replace(/^(\d{3})(\d{3})(\d{0,3}).*/, '$1.$2.$3');
+                          } else if (value.length > 3) {
+                            value = value.replace(/^(\d{3})(\d{0,3}).*/, '$1.$2');
+                          }
+                          field.onChange(value);
+                        }
+                      }}
+                      className="font-mono"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

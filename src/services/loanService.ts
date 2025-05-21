@@ -1,7 +1,7 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
+import { validateCPF } from '@/lib/validation';
 import {
   collection,
   addDoc,
@@ -41,6 +41,25 @@ const convertToDate = (field: any): Date | null => {
   return null; // Or throw an error if strict conversion is needed
 };
 
+/**
+ * Valida os dados de entrada para criação de empréstimo
+ * @param loanDetails Dados do empréstimo a serem validados
+ * @throws Error se os dados forem inválidos
+ */
+function validateLoanInput(loanDetails: CreateLoanInput): void {
+  if (!loanDetails.borrowerCPF || !validateCPF(loanDetails.borrowerCPF)) {
+    throw new Error("CPF inválido. Por favor, verifique os dígitos.");
+  }
+  if (!loanDetails.bookKey) {
+    throw new Error("Livro não selecionado.");
+  }
+  if (!loanDetails.dueDate) {
+    throw new Error("Data de devolução não informada.");
+  }
+  if (loanDetails.dueDate < new Date()) {
+    throw new Error("Data de devolução deve ser no futuro.");
+  }
+}
 
 /**
  * Creates a new loan record in Firestore and decrements book availability.
@@ -52,6 +71,9 @@ const convertToDate = (field: any): Date | null => {
 export async function createLoan(
   loanDetails: CreateLoanInput
 ): Promise<string> {
+  // Valida os dados de entrada
+  validateLoanInput(loanDetails);
+
   const bookRef = doc(db, 'books', loanDetails.bookKey);
 
   try {
