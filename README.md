@@ -1,4 +1,4 @@
-# Firebase Studio
+# Projeto Biblioteca
 
 Este é um template inicial NextJS no Firebase Studio.
 

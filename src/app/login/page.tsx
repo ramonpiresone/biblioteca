@@ -47,7 +47,7 @@ export default function LoginPage() {
       <div className="p-8 bg-card shadow-xl rounded-lg w-full max-w-md text-center border">
         <div className="flex justify-center items-center mb-6 text-primary">
           <BookOpen size={40} className="mr-2"/>
-          <h1 className="text-3xl font-bold">BiblioTech Lite</h1>
+          <h1 className="text-3xl font-bold">Projeto Biblioteca</h1>
         </div>
         <p className="mb-8 text-muted-foreground">
           Faça login com sua conta Google para explorar a biblioteca.

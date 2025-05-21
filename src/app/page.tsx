@@ -38,13 +38,15 @@ export default function HomePage() {
       if (!signal.aborted) {
         setResults(books);
       }
-    } catch (e: any) { // Catching AbortError is handled in searchBooks
+    } catch (e: any) { 
       if (e.name !== 'AbortError') {
-        console.error("Search failed:", e);
+        console.error("Falha na busca:", e);
         if (!signal.aborted) {
           setError("Falha ao buscar livros. Por favor, tente novamente mais tarde.");
           setResults([]);
         }
+      } else {
+         console.log("Busca abortada.");
       }
     } finally {
       if (!signal.aborted) {
@@ -59,9 +61,9 @@ export default function HomePage() {
 
     if (initialLoad && debouncedQuery === '') {
       setInitialLoad(false); 
-      setIsLoading(false); // Ensure loading is false if no search is performed
-      setResults([]); // Ensure results are empty if no search
-      setError(null); // Ensure no error if no search
+      setIsLoading(false); 
+      setResults([]); 
+      setError(null); 
       return;
     }
     
@@ -71,11 +73,11 @@ export default function HomePage() {
       controller.abort();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [debouncedQuery, initialLoad]); // performSearch is stable due to useCallback with empty deps
+  }, [debouncedQuery, initialLoad]); 
   
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-center text-primary">Bem-vindo ao BiblioTech Lite</h1>
+      <h1 className="text-3xl font-bold text-center text-primary">Bem-vindo ao Projeto Biblioteca</h1>
       <p className="text-center text-muted-foreground">
         Explore uma vasta coleção de livros. Pesquise e adicione aos favoritos.
       </p>

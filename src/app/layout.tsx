@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'BiblioTech Lite',
+  title: 'Projeto Biblioteca',
   description: 'Um aplicativo moderno de gerenciamento de biblioteca.',
 };
 
@@ -38,7 +38,7 @@ export default function RootLayout({
                 {children}
               </main>
               <footer className="py-6 text-center text-sm text-muted-foreground border-t">
-                © {new Date().getFullYear()} BiblioTech Lite. Todos os direitos reservados.
+                © {new Date().getFullYear()} Projeto Biblioteca. Todos os direitos reservados.
               </footer>
             </div>
             <Toaster />
