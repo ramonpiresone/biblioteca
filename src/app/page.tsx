@@ -3,79 +3,55 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Book } from '@/types';
-import { searchLibraryBooks } from '@/services/bookService'; // Changed import
-import { useDebounce } from '@/hooks/use-debounce';
+import { getAllLibraryBooks } from '@/services/bookService';
 import { BookSearch } from '@/app/(components)/book-search';
 import { BookList } from '@/app/(components)/book-list';
 import { Loader } from '@/components/ui/loader';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal } from 'lucide-react';
+import { Terminal, BookHeart } from 'lucide-react';
 
 export default function HomePage() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Book[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [allBooks, setAllBooks] = useState<Book[]>([]);
+  const [displayedBooks, setDisplayedBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoad, setInitialLoad] = useState(true);
 
-  const debouncedQuery = useDebounce(query, 500);
-
-  const performSearch = useCallback(async (currentQuery: string, signal: AbortSignal) => {
-    if (!currentQuery.trim()) {
-      setResults([]);
+  useEffect(() => {
+    const fetchAllBooks = async () => {
+      setIsLoading(true);
       setError(null);
-      setIsLoading(false);
-      setInitialLoad(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setInitialLoad(false);
-
-    try {
-      // Search local Firestore books, do not filter by availability for home page catalog
-      const books = await searchLibraryBooks(currentQuery, 20, false); 
-      if (!signal.aborted) {
-        setResults(books);
-      }
-    } catch (e: any) { 
-      // AbortError handling can remain for UI responsiveness, even if Firestore SDK doesn't use the signal directly
-      if (e.name !== 'AbortError') {
-        console.error("Falha na busca:", e);
-        if (!signal.aborted) {
-          setError("Falha ao buscar livros. Por favor, tente novamente mais tarde.");
-          setResults([]);
-        }
-      } else {
-         console.log("Busca abortada (UI).");
-      }
-    } finally {
-      if (!signal.aborted) {
+      try {
+        const books = await getAllLibraryBooks();
+        setAllBooks(books);
+        setDisplayedBooks(books);
+      } catch (e: any) {
+        console.error("Falha ao buscar todos os livros:", e);
+        setError("Não foi possível carregar o catálogo de livros. Por favor, tente recarregar a página.");
+        setAllBooks([]);
+        setDisplayedBooks([]);
+      } finally {
         setIsLoading(false);
       }
-    }
+    };
+    fetchAllBooks();
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const signal = controller.signal;
-
-    if (initialLoad && debouncedQuery === '') {
-      setInitialLoad(false); 
-      setIsLoading(false); 
-      setResults([]); 
-      setError(null); 
+    if (query.trim() === '') {
+      setDisplayedBooks(allBooks);
       return;
     }
-    
-    performSearch(debouncedQuery, signal);
 
-    return () => {
-      controller.abort();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [debouncedQuery, initialLoad]); 
+    const lowerCaseQuery = query.toLowerCase();
+    const filtered = allBooks.filter(book => {
+      const titleMatch = book.title.toLowerCase().includes(lowerCaseQuery);
+      const authorMatch = book.author_name?.some(author => author.toLowerCase().includes(lowerCaseQuery));
+      const isbnMatch = book.isbn?.some(isbn => isbn.includes(lowerCaseQuery));
+      return titleMatch || authorMatch || isbnMatch;
+    });
+    setDisplayedBooks(filtered);
+  }, [query, allBooks]);
   
   return (
     <div className="space-y-8">
@@ -84,29 +60,39 @@ export default function HomePage() {
         Explore o nosso acervo de livros. Pesquise e adicione aos favoritos.
       </p>
       
-      <BookSearch query={query} setQuery={setQuery} placeholder="Buscar livro no acervo por título ou ISBN..."/>
+      <BookSearch query={query} setQuery={setQuery} placeholder="Buscar no acervo por título, autor ou ISBN..."/>
 
-      {isLoading && <Loader className="my-8" size={48} />}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-10">
+          <Loader size={48} />
+          <p className="mt-4 text-muted-foreground">Carregando acervo de livros...</p>
+        </div>
+      )}
       
       {error && !isLoading && (
         <Alert variant="destructive" className="my-8">
           <Terminal className="h-4 w-4" />
-          <AlertTitle>Erro na Busca</AlertTitle>
+          <AlertTitle>Erro ao Carregar Livros</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      {!isLoading && !error && results.length === 0 && !initialLoad && query.trim() !== '' && (
-         <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado em nosso acervo para &quot;{query}&quot;.</p>
-      )}
-
-      {!isLoading && !error && results.length > 0 && (
-        <BookList books={results} />
+      {!isLoading && !error && allBooks.length === 0 && (
+         <div className="text-center py-10">
+            <BookHeart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">Nenhum livro encontrado em nosso acervo no momento.</p>
+            <p className="text-sm text-muted-foreground mt-1">Administradores podem adicionar livros na seção "Gerenciar".</p>
+         </div>
       )}
       
-      {!isLoading && !error && results.length === 0 && query.trim() === '' && !initialLoad && (
-         <p className="text-center text-muted-foreground mt-8">Comece a digitar para buscar livros no acervo.</p>
+      {!isLoading && !error && displayedBooks.length === 0 && query.trim() !== '' && (
+         <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado no acervo para &quot;{query}&quot;.</p>
       )}
+
+      {!isLoading && !error && displayedBooks.length > 0 && (
+        <BookList books={displayedBooks} />
+      )}
+      
     </div>
   );
 }

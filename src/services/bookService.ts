@@ -48,7 +48,7 @@ export async function ensureBookExists(book: Book): Promise<void> {
         first_publish_year: book.first_publish_year,
         isbn: book.isbn || [],
         cover_i: book.cover_i,
-        olid: book.olid, // This might be redundant if key is always the OLID we care about
+        olid: book.olid, 
         cover_url_small: book.cover_url_small,
         cover_url_medium: book.cover_url_medium,
         cover_url_large: book.cover_url_large,
@@ -57,16 +57,13 @@ export async function ensureBookExists(book: Book): Promise<void> {
       };
 
       if (!bookSnap.exists()) {
-        // If book doesn't exist, set it with basic info. Quantity is not set here.
         transaction.set(bookRef, bookDataForFirestore);
       } else {
-        // If book exists, only update lastAccessedAt and ensure core fields are merged.
         transaction.set(bookRef, 
           { 
             lastAccessedAt: serverTimestamp() as Timestamp,
             title: book.title, 
             author_name: book.author_name || [],
-            // Optionally re-merge other fields if they might be updated from source
             isbn: book.isbn || [],
             cover_i: book.cover_i,
             olid: book.olid,
@@ -133,11 +130,11 @@ export async function adminAddBook(isbn: string, quantity: number): Promise<Book
       olid: firestoreBookKey.startsWith('OL') ? firestoreBookKey : (bookDetailsAPI.identifiers?.openlibrary?.[0]),
       description: bookDetailsAPI.subtitle || (typeof bookDetailsAPI.notes === 'string' ? bookDetailsAPI.notes : bookDetailsAPI.notes?.value),
       quantity: quantity,
-      availableQuantity: quantity, // Initially, all are available
+      availableQuantity: quantity, 
       lastAccessedAt: serverTimestamp() as Timestamp,
     };
     
-    await setDoc(bookRef, bookData, { merge: true }); // Merge true to update if exists
+    await setDoc(bookRef, bookData, { merge: true }); 
     console.log(`Book ${firestoreBookKey} added/updated by admin with quantity ${quantity}.`);
     
     const savedBookSnap = await getDoc(bookRef);
@@ -245,6 +242,30 @@ export async function getFavoriteBooks(userId: string): Promise<Book[]> {
 }
 
 /**
+ * Fetches all books from the library inventory, ordered by title.
+ * @returns A promise that resolves to an array of Book objects.
+ */
+export async function getAllLibraryBooks(): Promise<Book[]> {
+  const booksRef = collection(db, 'books');
+  // Consider ordering by a more relevant field for initial display, e.g., lastAccessedAt or title
+  const q = query(booksRef, orderBy('title', 'asc')); 
+  try {
+    const querySnapshot = await getDocs(q);
+    const books: Book[] = [];
+    querySnapshot.forEach((docSnap) => {
+      if (docSnap.exists()) {
+        books.push({ ...docSnap.data(), key: docSnap.id } as Book);
+      }
+    });
+    return books;
+  } catch (error) {
+    console.error("Error fetching all library books:", error);
+    return [];
+  }
+}
+
+
+/**
  * Searches books in the local library inventory.
  * Matches against title (case-insensitive prefix) and ISBNs.
  * @param searchText The text to search for.
@@ -265,20 +286,30 @@ export async function searchLibraryBooks(
   const searchTextLower = searchText.toLowerCase();
   
   const titleQueryConstraints: QueryConstraint[] = [
-    orderBy('title'), // Firestore requires orderBy on the field used in range queries
+    orderBy('title'), 
     startAt(searchText), 
-    endAt(searchText + '\uf8ff'), // \uf8ff is a very high code point character
+    endAt(searchText + '\uf8ff'), 
     limit(searchLimit)
   ];
 
   const isbnQueryConstraints: QueryConstraint[] = [
-    where('isbn', 'array-contains', searchText), // Assumes searchText is a potential ISBN
+    where('isbn', 'array-contains', searchText), 
     limit(searchLimit)
   ];
 
   if (filterByAvailability) {
-    titleQueryConstraints.unshift(where('availableQuantity', '>', 0));
-    isbnQueryConstraints.unshift(where('availableQuantity', '>', 0));
+    // This needs to be the first orderBy if combined with range queries on another field.
+    // However, Firestore requires the first orderBy to be on the field used for inequality.
+    // So, we add it to both, and if availableQuantity is not the primary sort, this might be tricky.
+    // For now, this assumes availableQuantity > 0 is a filter, not a primary sort.
+    // If combined with orderBy('title'), this might require a composite index or client-side filtering for availability.
+    // Let's simplify: if filtering by availability, we might need to fetch more and filter client-side,
+    // or ensure queries are structured for Firestore's indexing.
+    // For simplicity in this step, we'll add the 'where' clause.
+    // This means if you order by title, you'd need a composite index on (availableQuantity, title).
+    // Or, filter by title first, then filter by availability client-side if this becomes an issue.
+    titleQueryConstraints.unshift(where('availableQuantity', '>', 0)); // Add to the beginning
+    isbnQueryConstraints.unshift(where('availableQuantity', '>', 0)); // Add to the beginning
   }
   
   const titleQuery = query(booksRef, ...titleQueryConstraints);
@@ -294,7 +325,6 @@ export async function searchLibraryBooks(
 
     titleSnapshot.docs.forEach(docSnap => {
       const bookData = docSnap.data() as Book;
-      // Client-side refinement for case-insensitivity on title prefix match
       if (docSnap.exists() && bookData.title && bookData.title.toLowerCase().startsWith(searchTextLower)) { 
         booksMap.set(docSnap.id, { ...bookData, key: docSnap.id });
       }
