@@ -18,6 +18,7 @@ import {
   limit,
   startAt,
   endAt,
+  QueryConstraint,
 } from 'firebase/firestore';
 import type { Book, FavoriteRecord, OpenLibraryBookDetails } from '@/types';
 import { getBookDetailsByISBN as fetchBookDetailsFromAPI } from '@/lib/open-library';
@@ -246,37 +247,42 @@ export async function getFavoriteBooks(userId: string): Promise<Book[]> {
 /**
  * Searches books in the local library inventory.
  * Matches against title (case-insensitive prefix) and ISBNs.
- * Only returns books with availableQuantity > 0.
  * @param searchText The text to search for.
  * @param searchLimit Max number of books to return.
+ * @param filterByAvailability If true (default), only returns books with availableQuantity > 0.
  * @returns A promise that resolves to an array of Book objects.
  */
-export async function searchLibraryBooks(searchText: string, searchLimit: number = 10): Promise<Book[]> {
+export async function searchLibraryBooks(
+  searchText: string, 
+  searchLimit: number = 10, 
+  filterByAvailability: boolean = true
+): Promise<Book[]> {
   if (!searchText.trim()) {
     return [];
   }
 
   const booksRef = collection(db, 'books');
   const searchTextLower = searchText.toLowerCase();
-  const searchTextUpper = searchTextLower + '\uf8ff'; // Firestore string range query trick for prefix
-
-  // Query for title prefix match
-  const titleQuery = query(
-    booksRef,
-    where('availableQuantity', '>', 0),
+  
+  const titleQueryConstraints: QueryConstraint[] = [
     orderBy('title'), // Firestore requires orderBy on the field used in range queries
     startAt(searchText), 
     endAt(searchText + '\uf8ff'), // \uf8ff is a very high code point character
     limit(searchLimit)
-  );
+  ];
 
-  // Query for ISBN match
-  const isbnQuery = query(
-    booksRef,
-    where('availableQuantity', '>', 0),
+  const isbnQueryConstraints: QueryConstraint[] = [
     where('isbn', 'array-contains', searchText), // Assumes searchText is a potential ISBN
     limit(searchLimit)
-  );
+  ];
+
+  if (filterByAvailability) {
+    titleQueryConstraints.unshift(where('availableQuantity', '>', 0));
+    isbnQueryConstraints.unshift(where('availableQuantity', '>', 0));
+  }
+  
+  const titleQuery = query(booksRef, ...titleQueryConstraints);
+  const isbnQuery = query(booksRef, ...isbnQueryConstraints);
   
   try {
     const [titleSnapshot, isbnSnapshot] = await Promise.all([
@@ -287,14 +293,16 @@ export async function searchLibraryBooks(searchText: string, searchLimit: number
     const booksMap = new Map<string, Book>();
 
     titleSnapshot.docs.forEach(docSnap => {
-      if (docSnap.exists() && docSnap.data().title.toLowerCase().startsWith(searchTextLower)) { // Client-side refinement for case-insensitivity
-        booksMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Book);
+      const bookData = docSnap.data() as Book;
+      // Client-side refinement for case-insensitivity on title prefix match
+      if (docSnap.exists() && bookData.title && bookData.title.toLowerCase().startsWith(searchTextLower)) { 
+        booksMap.set(docSnap.id, { ...bookData, key: docSnap.id });
       }
     });
 
     isbnSnapshot.docs.forEach(docSnap => {
       if (docSnap.exists()) {
-         booksMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Book);
+         booksMap.set(docSnap.id, { ...docSnap.data(), key: docSnap.id } as Book);
       }
     });
     

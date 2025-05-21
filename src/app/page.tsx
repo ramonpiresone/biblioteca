@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Book } from '@/types';
-import { searchBooks } from '@/lib/open-library';
+import { searchLibraryBooks } from '@/services/bookService'; // Changed import
 import { useDebounce } from '@/hooks/use-debounce';
 import { BookSearch } from '@/app/(components)/book-search';
 import { BookList } from '@/app/(components)/book-list';
@@ -34,11 +34,13 @@ export default function HomePage() {
     setInitialLoad(false);
 
     try {
-      const books = await searchBooks(currentQuery, 20, signal);
+      // Search local Firestore books, do not filter by availability for home page catalog
+      const books = await searchLibraryBooks(currentQuery, 20, false); 
       if (!signal.aborted) {
         setResults(books);
       }
     } catch (e: any) { 
+      // AbortError handling can remain for UI responsiveness, even if Firestore SDK doesn't use the signal directly
       if (e.name !== 'AbortError') {
         console.error("Falha na busca:", e);
         if (!signal.aborted) {
@@ -46,7 +48,7 @@ export default function HomePage() {
           setResults([]);
         }
       } else {
-         console.log("Busca abortada.");
+         console.log("Busca abortada (UI).");
       }
     } finally {
       if (!signal.aborted) {
@@ -79,10 +81,10 @@ export default function HomePage() {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold text-center text-primary">Bem-vindo ao Projeto Biblioteca</h1>
       <p className="text-center text-muted-foreground">
-        Explore uma vasta coleção de livros. Pesquise e adicione aos favoritos.
+        Explore o nosso acervo de livros. Pesquise e adicione aos favoritos.
       </p>
       
-      <BookSearch query={query} setQuery={setQuery} placeholder="Buscar por título, autor ou ISBN..."/>
+      <BookSearch query={query} setQuery={setQuery} placeholder="Buscar livro no acervo por título ou ISBN..."/>
 
       {isLoading && <Loader className="my-8" size={48} />}
       
@@ -95,7 +97,7 @@ export default function HomePage() {
       )}
 
       {!isLoading && !error && results.length === 0 && !initialLoad && query.trim() !== '' && (
-         <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado para &quot;{query}&quot;.</p>
+         <p className="text-center text-muted-foreground mt-8">Nenhum livro encontrado em nosso acervo para &quot;{query}&quot;.</p>
       )}
 
       {!isLoading && !error && results.length > 0 && (
@@ -103,7 +105,7 @@ export default function HomePage() {
       )}
       
       {!isLoading && !error && results.length === 0 && query.trim() === '' && !initialLoad && (
-         <p className="text-center text-muted-foreground mt-8">Comece a digitar para buscar livros.</p>
+         <p className="text-center text-muted-foreground mt-8">Comece a digitar para buscar livros no acervo.</p>
       )}
     </div>
   );
