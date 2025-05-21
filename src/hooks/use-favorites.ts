@@ -80,7 +80,7 @@ export function useFavorites() {
       await fbRemoveFavorite(user.uid, bookKey);
       // Optionally re-fetch.
       // await fetchFavorites();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to remove favorite from Firestore", error);
       // Revert optimistic update
       setFavorites((prevFavorites) => {

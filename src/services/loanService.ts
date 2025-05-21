@@ -17,7 +17,8 @@ import {
   getDoc,
   writeBatch,
 } from 'firebase/firestore';
-import type { Loan, Book } from '@/types'; 
+import type { Loan, Book } from '@/types';
+import { LoanValidationError, LoanNotFoundError } from './errors';
 
 // Define a more specific input type for creating loans
 export interface CreateLoanInput {
@@ -197,56 +198,78 @@ export async function getUserLoans(userId: string): Promise<Loan[]> {
   });
 }
 
+// These errors have been moved to errors.ts
+
 /**
  * Updates a loan's status to 'returned' and sets the returnDate.
  * Increments book availability. Transactional.
  * @param loanId The ID of the loan to mark as returned.
- * @throws Error if loan or book not found, or other Firestore errors.
+ * @throws {LoanValidationError} If the loan ID is invalid
+ * @throws {LoanNotFoundError} If the loan is not found
+ * @throws {Error} For other Firestore errors
  */
 export async function returnBook(loanId: string): Promise<void> {
-  if (!loanId) {
-    console.error("returnBook called with invalid loanId");
-    throw new Error("ID do empréstimo é obrigatório.");
+  if (!loanId?.trim()) {
+    throw new LoanValidationError("ID do empréstimo é obrigatório.");
   }
+
   const loanRef = doc(db, 'loans', loanId);
 
   try {
     await runTransaction(db, async (transaction) => {
       const loanSnap = await transaction.get(loanRef);
       if (!loanSnap.exists()) {
-        throw new Error(`Empréstimo com ID ${loanId} não encontrado.`);
+        throw new LoanNotFoundError(loanId);
       }
-      // Loan data directly from Firestore will have Timestamps if they are Firestore Timestamps
-      const loanDataFromFirestore = loanSnap.data();
-      // Validação adicional do status
-      if (!loanDataFromFirestore.status || !['active', 'returned'].includes(loanDataFromFirestore.status)) {
-        throw new Error(`Status do empréstimo ${loanId} é inválido.`);
+
+      const loanData = loanSnap.data();
+      if (!loanData) {
+        throw new Error(`Dados do empréstimo ${loanId} estão corrompidos`);
       }
-      if (loanDataFromFirestore.status === 'returned') {
+
+      // Validação do status
+      if (!loanData.status || !['active', 'returned'].includes(loanData.status)) {
+        throw new LoanValidationError(`Status do empréstimo ${loanId} é inválido`);
+      }
+
+      if (loanData.status === 'returned') {
         console.warn(`Empréstimo ${loanId} já está marcado como devolvido.`);
         return;
       }
 
-      const bookRef = doc(db, 'books', loanDataFromFirestore.bookKey);
+      const bookRef = doc(db, 'books', loanData.bookKey);
       const bookSnap = await transaction.get(bookRef);
-      if (!bookSnap.exists()) {
-        throw new Error(`Livro com chave ${loanDataFromFirestore.bookKey} associado ao empréstimo ${loanId} não encontrado.`);
-      }
-      const bookData = bookSnap.data() as Book;
 
-      const newAvailableQuantity = (bookData.availableQuantity ?? 0) + 1;
+      if (!bookSnap.exists()) {
+        throw new Error(`Livro com chave ${loanData.bookKey} associado ao empréstimo ${loanId} não encontrado.`);
+      }
+
+      const bookData = bookSnap.data() as Book;
+      
+      // Garantir que availableQuantity nunca exceda quantity
+      const newAvailableQuantity = Math.min(
+        (bookData.availableQuantity ?? 0) + 1,
+        bookData.quantity ?? Number.MAX_SAFE_INTEGER
+      );
+
       transaction.update(bookRef, {
-        availableQuantity: Math.min(newAvailableQuantity, bookData.quantity ?? newAvailableQuantity),
+        availableQuantity: newAvailableQuantity,
+        lastAccessedAt: serverTimestamp(),
       });
 
       transaction.update(loanRef, {
         status: 'returned',
-        returnDate: serverTimestamp(), // Firestore server-side timestamp
+        returnDate: serverTimestamp(),
       });
     });
-  } catch (error) {
-    console.error(`Falha ao devolver livro para o empréstimo ${loanId}:`, error);
-    throw error; 
+  } catch (error: unknown) {
+    if (error instanceof LoanValidationError || 
+        error instanceof LoanNotFoundError) {
+      throw error;
+    }
+    console.error(`Falha ao devolver livro para o empréstimo ${loanId}:`, 
+                 error instanceof Error ? error.message : error);
+    throw new Error(`Erro ao processar devolução: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

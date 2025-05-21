@@ -1,4 +1,3 @@
-
 import { db } from '@/lib/firebase';
 import {
   doc,
@@ -24,16 +23,32 @@ import type { Book, FavoriteRecord, OpenLibraryBookDetails } from '@/types';
 import { getBookDetailsByISBN as fetchBookDetailsFromAPI } from '@/lib/open-library';
 
 /**
+ * Custom error for Book validation issues
+ */
+export class BookValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BookValidationError';
+  }
+}
+
+/**
  * Ensures a book exists in the top-level 'books' collection, typically called when a user interacts (e.g., favorites)
  * If it doesn't exist, it's added. Updates `lastAccessedAt` timestamp.
  * This function DOES NOT set or modify quantity fields.
  * @param book The book object from OpenLibrary search or similar source. Its `key` should be the OLID.
+ * @throws {BookValidationError} If the book data is invalid
+ * @throws {FirestoreError} If there's an issue with the Firestore transaction
  */
 export async function ensureBookExists(book: Book): Promise<void> {
-  if (!book || !book.key) {
-    console.error('ensureBookExists called with invalid book data');
-    return;
+  if (!book?.key) {
+    throw new BookValidationError('Livro inválido: key é obrigatório');
   }
+
+  if (!book.title?.trim()) {
+    throw new BookValidationError('Livro inválido: título é obrigatório');
+  }
+
   const bookRef = doc(db, 'books', book.key);
 
   try {
@@ -42,15 +57,18 @@ export async function ensureBookExists(book: Book): Promise<void> {
 
       const dataForFirestore: Partial<Book> = {
         key: book.key,
-        title: book.title,
-        author_name: book.author_name || [],
-        isbn: book.isbn || [],
+        title: book.title.trim(),
+        author_name: book.author_name?.filter(name => name?.trim()) || [],
+        isbn: book.isbn?.filter(isbn => isbn?.trim()) || [],
         lastAccessedAt: serverTimestamp() as Timestamp,
       };
 
-      if (book.first_publish_year !== undefined) dataForFirestore.first_publish_year = book.first_publish_year;
+      if (book.first_publish_year !== undefined && !isNaN(book.first_publish_year)) {
+        dataForFirestore.first_publish_year = book.first_publish_year;
+      }
+
       if (book.cover_i !== undefined) dataForFirestore.cover_i = book.cover_i;
-      if (book.olid !== undefined) dataForFirestore.olid = book.olid;
+      if (book.olid !== undefined && book.olid.trim()) dataForFirestore.olid = book.olid;
       if (book.cover_url_small !== undefined) dataForFirestore.cover_url_small = book.cover_url_small;
       if (book.cover_url_medium !== undefined) dataForFirestore.cover_url_medium = book.cover_url_medium;
       if (book.cover_url_large !== undefined) dataForFirestore.cover_url_large = book.cover_url_large;
@@ -59,11 +77,17 @@ export async function ensureBookExists(book: Book): Promise<void> {
       if (!bookSnap.exists()) {
         transaction.set(bookRef, dataForFirestore);
       } else {
-        transaction.set(bookRef, dataForFirestore, { merge: true });
+        transaction.update(bookRef, {
+          ...dataForFirestore,
+          // Preserve existing book information that shouldn't be overwritten
+          quantity: bookSnap.data().quantity,
+          availableQuantity: bookSnap.data().availableQuantity,
+        });
       }
     });
   } catch (error) {
-    console.error("Transaction failed for ensureBookExists: ", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Transaction failed for ensureBookExists: ", errorMessage);
     throw error;
   }
 }

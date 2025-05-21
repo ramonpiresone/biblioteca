@@ -25,7 +25,7 @@ export default function HomePage() {
         const books = await getAllLibraryBooks();
         setAllBooks(books);
         setDisplayedBooks(books);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("Falha ao buscar todos os livros:", e);
         setError("Não foi possível carregar o catálogo de livros. Por favor, tente recarregar a página.");
         setAllBooks([]);

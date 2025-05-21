@@ -33,7 +33,7 @@ export function ManageLoans() {
     try {
       const allLoans = await getAllLoans();
       setLoans(allLoans);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to fetch loans:", err);
       setError("Não foi possível carregar os empréstimos. Tente novamente.");
     } finally {
@@ -54,7 +54,7 @@ export function ManageLoans() {
         description: "O empréstimo foi marcado como devolvido com sucesso.",
       });
       fetchLoans(); // Refresh the list
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to return book:", err);
       toast({
         title: "Erro ao Devolver Livro",

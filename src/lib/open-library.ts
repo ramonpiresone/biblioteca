@@ -1,4 +1,3 @@
-
 import type { Book, OpenLibrarySearchResponse, OpenLibraryBookData, OpenLibraryBookDetails } from '@/types';
 
 const OPEN_LIBRARY_SEARCH_URL = 'https://openlibrary.org/search.json';
@@ -23,6 +22,26 @@ function getCoverUrls(item: { cover_i?: number, isbn?: string[] }): { small?: st
   return {};
 }
 
+// Custom error classes for better error handling
+export class OpenLibraryAPIError extends Error {
+  constructor(statusCode: number, message: string) {
+    super(`Open Library API Error (${statusCode}): ${message}`);
+    this.name = 'OpenLibraryAPIError';
+  }
+}
+
+export class OpenLibraryNetworkError extends Error {
+  constructor(message: string) {
+    super(`Open Library Network Error: ${message}`);
+    this.name = 'OpenLibraryNetworkError';
+  }
+}
+
+// Add type for the fetch response
+interface OpenLibraryErrorResponse {
+  error: string;
+}
+
 export async function searchBooks(query: string, limit: number = 20, signal?: AbortSignal): Promise<Book[]> {
   if (!query.trim()) {
     return [];
@@ -36,8 +55,15 @@ export async function searchBooks(query: string, limit: number = 20, signal?: Ab
   try {
     const response = await fetch(`${OPEN_LIBRARY_SEARCH_URL}?${params.toString()}`, { signal });
     if (!response.ok) {
-      console.error('Open Library API search error:', response.status, await response.text());
-      return [];
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorData = JSON.parse(errorText) as OpenLibraryErrorResponse;
+        errorMessage = errorData.error || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new OpenLibraryAPIError(response.status, errorMessage);
     }
     const data: OpenLibrarySearchResponse = await response.json();
     
@@ -73,19 +99,23 @@ export async function searchBooks(query: string, limit: number = 20, signal?: Ab
         cover_url_large: covers.large,
       };
     });
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       console.log('Busca de livros abortada.');
       return []; 
     }
-    console.error('Falha ao buscar livros da Open Library:', error);
-    return [];
+    if (error instanceof OpenLibraryAPIError) {
+      console.error(error.message);
+      return [];
+    }
+    console.error('Falha ao buscar livros da Open Library:', error instanceof Error ? error.message : error);
+    throw new OpenLibraryNetworkError(error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
 export async function getBookDetailsByISBN(isbn: string, signal?: AbortSignal): Promise<OpenLibraryBookDetails | null> {
   if (!isbn.trim()) {
-    return null;
+    throw new Error('ISBN não pode estar vazio');
   }
   const params = new URLSearchParams({
     bibkeys: `ISBN:${isbn}`,
@@ -96,20 +126,37 @@ export async function getBookDetailsByISBN(isbn: string, signal?: AbortSignal): 
   try {
     const response = await fetch(`${OPEN_LIBRARY_BOOKS_API_URL}?${params.toString()}`, { signal });
     if (!response.ok) {
-      console.error('Open Library Books API error:', response.status, await response.text());
-      return null;
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorData = JSON.parse(errorText) as OpenLibraryErrorResponse;
+        errorMessage = errorData.error || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new OpenLibraryAPIError(response.status, errorMessage);
     }
     const data: OpenLibraryBookData = await response.json();
     const bookKey = `ISBN:${isbn}`;
-    // The API returns an object where the key is `ISBN:${isbn}`
-    // and the value is the book details.
-    return data[bookKey] || null;
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+    const bookDetails = data[bookKey];
+
+    if (!bookDetails) {
+      console.warn(`No book details found for ISBN: ${isbn}`);
+      return null;
+    }
+
+    return bookDetails;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       console.log('Busca de detalhes do livro abortada.');
       return null;
     }
-    console.error('Falha ao buscar detalhes do livro da Open Library:', error);
-    return null;
+    if (error instanceof OpenLibraryAPIError) {
+      console.error(error.message);
+      return null;
+    }
+    console.error('Falha ao buscar detalhes do livro da Open Library:', 
+                 error instanceof Error ? error.message : error);
+    throw new OpenLibraryNetworkError(error instanceof Error ? error.message : 'Unknown error');
   }
 }
